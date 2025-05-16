@@ -689,4 +689,43 @@ body {
   border-radius: var(--border-radius);
   background-color: #f8f8f8;
   padding: 10px;
+}
+
+.current-server {
+  background-color: #f3f5f7;
+  padding: 12px;
+  margin-bottom: 20px;
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+  color: #555;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid #607d8b;
+}
+
+.server-refresh {
+  background-color: #607d8b;
+  color: white;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.server-refresh:hover {
+  background-color: #455a64;
+  transform: rotate(180deg);
+}
+
+.button-small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: normal;
 } 

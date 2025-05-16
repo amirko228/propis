@@ -2,6 +2,7 @@
 const config = {
   // URL API бэкенда - массив резервных серверов
   API_URLS: [
+    'http://localhost:8000',
     'https://propisi-backend.onrender.com',
     'https://propisi-api.adaptable.app',
     'https://propisi-api-2.onrender.com'

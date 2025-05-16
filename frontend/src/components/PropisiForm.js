@@ -195,8 +195,9 @@ const PropisiForm = () => {
       for (let i = 0; i < config.API_URLS.length; i++) {
         const apiUrl = config.API_URLS[i];
         try {
-          const response = await axios.get(`${apiUrl}/`, { 
-            timeout: 5000,
+          console.log(`Проверяем API: ${apiUrl}`);
+          const response = await axios.get(`${apiUrl}/health`, { 
+            timeout: 3000,
             validateStatus: status => status === 200 
           });
           
@@ -209,12 +210,37 @@ const PropisiForm = () => {
             break;
           }
         } catch (err) {
-          console.log(`API ${apiUrl} недоступен:`, err.message);
+          console.log(`API ${apiUrl} недоступен: ${err.message}`);
+          
+          // Если это локальный сервер, попробуем основной endpoint
+          if (apiUrl === 'http://localhost:8000') {
+            try {
+              const rootResponse = await axios.get(`${apiUrl}/`, { 
+                timeout: 3000,
+                validateStatus: status => status === 200 
+              });
+              
+              if (rootResponse.status === 200) {
+                setCurrentApiUrl(apiUrl);
+                setCurrentApiIndex(i);
+                apiFound = true;
+                console.log(`Локальный API доступен: ${apiUrl}`);
+                setInfoMessage(null);
+                break;
+              }
+            } catch (rootErr) {
+              console.log(`Локальный API недоступен: ${rootErr.message}`);
+            }
+          }
         }
       }
       
       if (!apiFound) {
         setInfoMessage('Все серверы временно недоступны. Подождите немного и повторите попытку.');
+        // Запускаем автоматическую повторную проверку через 10 секунд
+        setTimeout(() => {
+          checkApi();
+        }, 10000);
       }
     };
     
@@ -224,13 +250,25 @@ const PropisiForm = () => {
   // Функция проверки доступности API
   const checkApiAvailability = async (apiUrl = currentApiUrl) => {
     try {
-      const response = await axios.get(`${apiUrl}/`, { 
-        timeout: 5000,
-        validateStatus: status => status === 200
-      });
-      return response.status === 200;
+      console.log(`Проверяем доступность API: ${apiUrl}`);
+      // Пробуем сначала /health
+      try {
+        const response = await axios.get(`${apiUrl}/health`, { 
+          timeout: 3000,
+          validateStatus: status => status === 200
+        });
+        return response.status === 200;
+      } catch (err) {
+        // Если /health не работает, пробуем корневой path
+        console.log(`Эндпоинт /health недоступен, пробуем корневой path`);
+        const rootResponse = await axios.get(`${apiUrl}/`, { 
+          timeout: 3000,
+          validateStatus: status => status === 200
+        });
+        return rootResponse.status === 200;
+      }
     } catch (err) {
-      console.error(`API ${apiUrl} недоступен:`, err);
+      console.error(`API ${apiUrl} недоступен: ${err.message}`);
       return false;
     }
   };
@@ -408,6 +446,35 @@ const PropisiForm = () => {
     }
   };
 
+  // Функция для ручной проверки серверов
+  const retryServerConnection = async () => {
+    setInfoMessage('Повторная проверка серверов...');
+    setError(null);
+    
+    let apiFound = false;
+    // Проверяем все API по очереди
+    for (let i = 0; i < config.API_URLS.length; i++) {
+      const apiUrl = config.API_URLS[i];
+      try {
+        const isAvailable = await checkApiAvailability(apiUrl);
+        if (isAvailable) {
+          setCurrentApiUrl(apiUrl);
+          setCurrentApiIndex(i);
+          apiFound = true;
+          setInfoMessage(`Сервер ${apiUrl} доступен`);
+          setTimeout(() => setInfoMessage(null), 3000);
+          break;
+        }
+      } catch (err) {
+        console.error(`Ошибка при проверке API ${apiUrl}:`, err);
+      }
+    }
+    
+    if (!apiFound) {
+      setError('Все серверы недоступны. Проверьте подключение к интернету или запустите локальный сервер.');
+    }
+  };
+
   // Обработчик отправки формы
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -539,6 +606,20 @@ const PropisiForm = () => {
       <div className="form-description">
         <p>Создавайте красивые прописи для обучения детей письму. Выберите варианты оформления и введите нужный текст.</p>
       </div>
+      
+      {/* Информация о текущем сервере */}
+      {currentApiUrl && (
+        <div className="current-server">
+          Используемый сервер: <strong>{currentApiUrl}</strong>
+          <button 
+            onClick={retryServerConnection}
+            className="server-refresh"
+            title="Проверить серверы"
+          >
+            ↻
+          </button>
+        </div>
+      )}
       
       <form onSubmit={handleSubmit}>
         {/* Секция разметки страницы */}
@@ -694,7 +775,21 @@ const PropisiForm = () => {
         </div>
 
         {/* Сообщение об ошибке */}
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div className="error-message">
+            {error}
+            {error.includes('недоступны') && (
+              <button 
+                type="button" 
+                className="button button-small" 
+                onClick={retryServerConnection}
+                style={{marginLeft: '10px', padding: '5px 10px', fontSize: '0.9rem'}}
+              >
+                Проверить снова
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Информационное сообщение */}
         {infoMessage && (
