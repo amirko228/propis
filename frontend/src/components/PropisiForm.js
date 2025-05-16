@@ -166,18 +166,70 @@ const PropisiForm = () => {
   const [previewType, setPreviewType] = useState(null);
   // Информационное сообщение
   const [infoMessage, setInfoMessage] = useState(null);
+  // Текущий используемый API URL
+  const [currentApiUrl, setCurrentApiUrl] = useState(config.API_URL);
+  // Индекс текущего API сервера
+  const [currentApiIndex, setCurrentApiIndex] = useState(0);
 
+  // Функция для переключения на следующий доступный API
+  const switchToNextApi = () => {
+    const nextIndex = (currentApiIndex + 1) % config.API_URLS.length;
+    const nextApiUrl = config.API_URLS[nextIndex];
+    setCurrentApiIndex(nextIndex);
+    setCurrentApiUrl(nextApiUrl);
+    console.log(`Переключаемся на API: ${nextApiUrl}`);
+    return nextApiUrl;
+  };
+  
   // Проверка доступности API при загрузке компонента
   useEffect(() => {
     const checkApi = async () => {
-      const isAvailable = await checkApiAvailability();
-      if (!isAvailable) {
-        setInfoMessage('Сервер генерации прописей загружается. Первый запрос может занять до 30 секунд.');
+      setInfoMessage('Проверяем доступность серверов...');
+      let apiFound = false;
+      
+      // Проверяем все API по очереди
+      for (let i = 0; i < config.API_URLS.length; i++) {
+        const apiUrl = config.API_URLS[i];
+        try {
+          const response = await axios.get(`${apiUrl}/`, { 
+            timeout: 5000,
+            validateStatus: status => status === 200 
+          });
+          
+          if (response.status === 200) {
+            setCurrentApiUrl(apiUrl);
+            setCurrentApiIndex(i);
+            apiFound = true;
+            console.log(`Найден работающий API: ${apiUrl}`);
+            setInfoMessage(null);
+            break;
+          }
+        } catch (err) {
+          console.log(`API ${apiUrl} недоступен:`, err.message);
+        }
+      }
+      
+      if (!apiFound) {
+        setInfoMessage('Все серверы временно недоступны. Подождите немного и повторите попытку.');
       }
     };
     
     checkApi();
   }, []);
+  
+  // Функция проверки доступности API
+  const checkApiAvailability = async (apiUrl = currentApiUrl) => {
+    try {
+      const response = await axios.get(`${apiUrl}/`, { 
+        timeout: 5000,
+        validateStatus: status => status === 200
+      });
+      return response.status === 200;
+    } catch (err) {
+      console.error(`API ${apiUrl} недоступен:`, err);
+      return false;
+    }
+  };
 
   // Обработчик изменения полей формы
   const handleChange = (e) => {
@@ -196,107 +248,112 @@ const PropisiForm = () => {
     });
   };
 
-  // Функция проверки доступности API
-  const checkApiAvailability = async () => {
-    try {
-      await axios.get(`${config.API_URL}/`, { timeout: 5000 });
-      return true;
-    } catch (err) {
-      console.error('API недоступен:', err);
-      return false;
-    }
-  };
-
   // Функция для загрузки предпросмотра
   const loadPreview = async () => {
     if (previewLoading) return;
     
     setPreviewLoading(true);
     setError(null);
-    setInfoMessage('Генерация предпросмотра может занять до 25 секунд, если сервер только что запустился...');
+    setInfoMessage('Генерация предпросмотра, пожалуйста подождите...');
     
-    try {
-      // Проверка доступности API
-      const isApiAvailable = await checkApiAvailability();
-      if (!isApiAvailable) {
-        setError('Сервер API недоступен. Пожалуйста, повторите попытку позже.');
-        return;
-      }
-      
-      // Создаем FormData для отправки на сервер
-      const formPayload = new FormData();
-      for (const key in formData) {
-        formPayload.append(key, formData[key]);
-      }
-      
-      // URL API для предпросмотра
-      const apiUrl = `${config.API_URL}/preview`;
-      
-      console.log('Отправляем запрос превью на:', apiUrl);
-      
-      // Отправляем запрос на генерацию предпросмотра
-      const response = await axios.post(apiUrl, formPayload, {
-        responseType: 'blob', // Получаем данные как бинарный файл
-        headers: {
-          'Accept': 'application/pdf,image/*',
-          'Content-Type': 'multipart/form-data'
-        },
-        timeout: 25000, // Увеличиваем таймаут до 25 секунд
-        withCredentials: false
-      });
-      
-      // Проверяем статус ответа
-      if (response.status !== 200) {
-        throw new Error(`Ошибка сервера: ${response.status}`);
-      }
-      
-      // Определяем тип ответа
-      const contentType = response.headers['content-type'];
-      console.log('Получен предпросмотр с типом:', contentType);
-      
-      if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-        // Создаем URL объект для отображения
-        const blob = new Blob([response.data], { type: contentType });
-        const url = URL.createObjectURL(blob);
-        
-        // Сохраняем URL для предпросмотра
-        setPreviewUrl(url);
-        setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
-      } else {
-        // Если содержимое не PDF или изображение, попробуем интерпретировать его как текст ошибки
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const result = reader.result;
-            const errorMessage = result.includes('{') 
-              ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
-              : result;
-            setError(`Ошибка превью: ${errorMessage}`);
-          } catch (e) {
-            setError('Произошла неизвестная ошибка при обработке ответа сервера');
-          }
-        };
-        reader.readAsText(response.data);
-      }
-    } catch (err) {
-      console.error('Ошибка при загрузке предпросмотра:', err);
-      
-      // Более детальная информация об ошибке
-      if (err.code === 'ECONNABORTED') {
-        setError('Превышено время ожидания ответа от сервера. Сервер может быть перегружен.');
-      } else if (err.response) {
-        // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
-        setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Пожалуйста, попробуйте позже'}`);
-      } else if (err.request) {
-        // Запрос был сделан, но ответ не получен
-        setError('Не удалось получить ответ от сервера. Сервер может быть недоступен.');
-      } else {
-        // Произошла ошибка при настройке запроса
-        setError(`Ошибка запроса: ${err.message}`);
-      }
-    } finally {
-      setPreviewLoading(false);
+    // Создаем FormData для отправки на сервер
+    const formPayload = new FormData();
+    for (const key in formData) {
+      formPayload.append(key, formData[key]);
     }
+    
+    let apiUrl = currentApiUrl;
+    let success = false;
+    let attempts = 0;
+    
+    // Пробуем все доступные API
+    while (!success && attempts < config.API_URLS.length) {
+      try {
+        // Проверка доступности текущего API
+        const isApiAvailable = await checkApiAvailability(apiUrl);
+        if (!isApiAvailable) {
+          apiUrl = switchToNextApi();
+          attempts++;
+          continue;
+        }
+        
+        // URL API для предпросмотра
+        const requestUrl = `${apiUrl}/preview`;
+        console.log('Отправляем запрос превью на:', requestUrl);
+        
+        // Отправляем запрос на генерацию предпросмотра
+        const response = await axios.post(requestUrl, formPayload, {
+          responseType: 'blob', // Получаем данные как бинарный файл
+          headers: {
+            'Accept': 'application/pdf,image/*',
+            'Content-Type': 'multipart/form-data'
+          },
+          timeout: 25000, // Увеличиваем таймаут до 25 секунд
+          withCredentials: false
+        });
+        
+        // Проверяем статус ответа
+        if (response.status !== 200) {
+          throw new Error(`Ошибка сервера: ${response.status}`);
+        }
+        
+        // Определяем тип ответа
+        const contentType = response.headers['content-type'];
+        console.log('Получен предпросмотр с типом:', contentType);
+        
+        if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
+          // Создаем URL объект для отображения
+          const blob = new Blob([response.data], { type: contentType });
+          const url = URL.createObjectURL(blob);
+          
+          // Сохраняем URL для предпросмотра
+          setPreviewUrl(url);
+          setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
+          success = true;
+          setInfoMessage(null);
+        } else {
+          // Если содержимое не PDF или изображение, попробуем интерпретировать его как текст ошибки
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const result = reader.result;
+              const errorMessage = result.includes('{') 
+                ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
+                : result;
+              setError(`Ошибка превью: ${errorMessage}`);
+            } catch (e) {
+              setError('Произошла неизвестная ошибка при обработке ответа сервера');
+            }
+          };
+          reader.readAsText(response.data);
+          
+          // Пробуем следующий API
+          apiUrl = switchToNextApi();
+          attempts++;
+        }
+      } catch (err) {
+        console.error('Ошибка при загрузке предпросмотра:', err);
+        
+        // Переключаемся на следующий API
+        apiUrl = switchToNextApi();
+        attempts++;
+        
+        // Если перепробовали все API, показываем ошибку
+        if (attempts >= config.API_URLS.length) {
+          if (err.code === 'ECONNABORTED') {
+            setError('Превышено время ожидания ответа. Все серверы перегружены, попробуйте позже.');
+          } else if (err.response) {
+            setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
+          } else if (err.request) {
+            setError('Все серверы не отвечают. Попробуйте позже или проверьте подключение к интернету.');
+          } else {
+            setError(`Ошибка: ${err.message}`);
+          }
+        }
+      }
+    }
+    
+    setPreviewLoading(false);
   };
 
   // Обработчик отправки формы
@@ -304,99 +361,116 @@ const PropisiForm = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setInfoMessage('Генерация PDF может занять до 30 секунд, если сервер только что запустился...');
-
-    try {
-      // Проверка доступности API
-      const isApiAvailable = await checkApiAvailability();
-      if (!isApiAvailable) {
-        setError('Сервер API недоступен. Пожалуйста, повторите попытку позже.');
-        return;
-      }
-      
-      // Создаем FormData для отправки на сервер
-      const formPayload = new FormData();
-      for (const key in formData) {
-        formPayload.append(key, formData[key]);
-      }
-
-      // URL API бэкенда
-      const apiUrl = `${config.API_URL}/generate-pdf`;
-      
-      console.log('Отправляем запрос на:', apiUrl);
-      
-      // Отправляем запрос на генерацию PDF
-      const response = await axios.post(apiUrl, formPayload, {
-        responseType: 'blob', // Получаем PDF как бинарный файл
-        headers: {
-          'Accept': 'application/pdf',
-          'Content-Type': 'multipart/form-data'
-        },
-        timeout: 30000, // Увеличиваем таймаут до 30 секунд
-        withCredentials: false
-      });
-
-      // Проверяем статус ответа
-      if (response.status !== 200) {
-        throw new Error(`Ошибка сервера: ${response.status}`);
-      }
-
-      // Проверяем тип контента
-      const contentType = response.headers['content-type'];
-      console.log('Получен ответ с типом:', contentType);
-      
-      // Проверяем, что получили PDF или изображение
-      if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-        // Создаем URL для скачивания PDF
-        const pdfBlob = new Blob([response.data], { type: contentType });
-        const url = URL.createObjectURL(pdfBlob);
-        
-        // Сохраняем URL для предпросмотра
-        setPreviewUrl(url);
-        setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
-        
-        // Создаем ссылку для скачивания
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'propisi.pdf');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } else {
-        // Если содержимое не PDF, попробуем интерпретировать его как текст ошибки
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const result = reader.result;
-            const errorMessage = result.includes('{') 
-              ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
-              : result;
-            setError(`Ошибка: ${errorMessage}`);
-          } catch (e) {
-            setError('Произошла неизвестная ошибка при обработке ответа сервера');
-          }
-        };
-        reader.readAsText(response.data);
-      }
-    } catch (err) {
-      console.error('Ошибка при генерации PDF:', err);
-      
-      // Более детальная информация об ошибке
-      if (err.code === 'ECONNABORTED') {
-        setError('Превышено время ожидания ответа от сервера. Сервер может быть перегружен.');
-      } else if (err.response) {
-        // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
-        setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Пожалуйста, попробуйте позже'}`);
-      } else if (err.request) {
-        // Запрос был сделан, но ответ не получен
-        setError('Сервер не отвечает. Пожалуйста, проверьте подключение к интернету или повторите попытку позже.');
-      } else {
-        // Произошла ошибка при настройке запроса
-        setError(`Ошибка запроса: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
+    setInfoMessage('Генерация PDF, пожалуйста подождите...');
+    
+    // Создаем FormData для отправки на сервер
+    const formPayload = new FormData();
+    for (const key in formData) {
+      formPayload.append(key, formData[key]);
     }
+    
+    let apiUrl = currentApiUrl;
+    let success = false;
+    let attempts = 0;
+    
+    // Пробуем все доступные API
+    while (!success && attempts < config.API_URLS.length) {
+      try {
+        // Проверка доступности текущего API
+        const isApiAvailable = await checkApiAvailability(apiUrl);
+        if (!isApiAvailable) {
+          apiUrl = switchToNextApi();
+          attempts++;
+          continue;
+        }
+        
+        // URL API для генерации PDF
+        const requestUrl = `${apiUrl}/generate-pdf`;
+        console.log('Отправляем запрос на:', requestUrl);
+        
+        // Отправляем запрос на генерацию PDF
+        const response = await axios.post(requestUrl, formPayload, {
+          responseType: 'blob', // Получаем PDF как бинарный файл
+          headers: {
+            'Accept': 'application/pdf',
+            'Content-Type': 'multipart/form-data'
+          },
+          timeout: 40000, // Увеличиваем таймаут до 40 секунд
+          withCredentials: false
+        });
+        
+        // Проверяем статус ответа
+        if (response.status !== 200) {
+          throw new Error(`Ошибка сервера: ${response.status}`);
+        }
+        
+        // Проверяем тип контента
+        const contentType = response.headers['content-type'];
+        console.log('Получен ответ с типом:', contentType);
+        
+        // Проверяем, что получили PDF или изображение
+        if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
+          // Создаем URL для скачивания PDF
+          const pdfBlob = new Blob([response.data], { type: contentType });
+          const url = URL.createObjectURL(pdfBlob);
+          
+          // Сохраняем URL для предпросмотра
+          setPreviewUrl(url);
+          setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
+          
+          // Создаем ссылку для скачивания
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'propisi.pdf');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          
+          success = true;
+          setInfoMessage(null);
+        } else {
+          // Если содержимое не PDF, попробуем интерпретировать его как текст ошибки
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const result = reader.result;
+              const errorMessage = result.includes('{') 
+                ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
+                : result;
+              setError(`Ошибка: ${errorMessage}`);
+            } catch (e) {
+              setError('Произошла неизвестная ошибка при обработке ответа сервера');
+            }
+          };
+          reader.readAsText(response.data);
+          
+          // Пробуем следующий API
+          apiUrl = switchToNextApi();
+          attempts++;
+        }
+      } catch (err) {
+        console.error('Ошибка при генерации PDF:', err);
+        
+        // Переключаемся на следующий API
+        apiUrl = switchToNextApi();
+        attempts++;
+        
+        // Если перепробовали все API, показываем ошибку
+        if (attempts >= config.API_URLS.length) {
+          if (err.code === 'ECONNABORTED') {
+            setError('Превышено время ожидания ответа. Все серверы перегружены, попробуйте позже.');
+          } else if (err.response) {
+            setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
+          } else if (err.request) {
+            setError('Все серверы не отвечают. Попробуйте позже или проверьте подключение к интернету.');
+          } else {
+            setError(`Ошибка: ${err.message}`);
+          }
+        }
+      }
+    }
+    
+    setLoading(false);
   };
 
   return (

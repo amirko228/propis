@@ -1,9 +1,16 @@
 // Конфигурация приложения
 const config = {
-  // URL API бэкенда
+  // URL API бэкенда - массив резервных серверов
+  API_URLS: [
+    'https://propisi-backend.onrender.com',
+    'https://propisi-api.adaptable.app',
+    'https://propisi-api-2.onrender.com'
+  ],
+  
+  // URL API для использования по умолчанию
   API_URL: process.env.NODE_ENV === 'development' 
     ? 'http://localhost:8000' 
-    : 'https://propis-api-2.onrender.com',
+    : 'https://propisi-backend.onrender.com',
   
   // Названия вариантов заполнения
   FILL_TYPES: {
