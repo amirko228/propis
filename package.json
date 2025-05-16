@@ -1,0 +1,16 @@
+{
+  "name": "propisi-generator-full",
+  "version": "1.0.0",
+  "description": "Генератор прописей по методике В. Илюхиной",
+  "scripts": {
+    "start:backend": "cd backend && python run.py",
+    "start:frontend": "cd frontend && npm start",
+    "install:backend": "cd backend && pip install --upgrade pip && pip install -r requirements.txt",
+    "install:frontend": "cd frontend && npm install",
+    "install": "npm run install:frontend && npm run install:backend",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
