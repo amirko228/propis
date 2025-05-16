@@ -1,7 +1,7 @@
 // Конфигурация приложения
 const config = {
   // URL API бэкенда
-  API_URL: 'http://localhost:8000',
+  API_URL: process.env.REACT_APP_API_URL || 'https://propisi-backend.vercel.app' || 'http://localhost:8000',
   
   // Названия вариантов заполнения
   FILL_TYPES: {
