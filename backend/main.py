@@ -20,17 +20,12 @@ from reportlab.graphics import renderPDF
 from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
+from cors_middleware import setup_cors
 
 app = FastAPI(title="Генератор прописей")
 
-# Настройка CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # В продакшене заменить на конкретные домены
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Настройка CORS с помощью нашего модуля
+setup_cors(app)
 
 # Модель данных для запроса
 class PropisiRequest(BaseModel):

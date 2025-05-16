@@ -199,24 +199,65 @@ const PropisiForm = () => {
       // URL API для предпросмотра
       const apiUrl = `${config.API_URL}/preview`;
       
+      console.log('Отправляем запрос превью на:', apiUrl);
+      
       // Отправляем запрос на генерацию предпросмотра
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем данные как бинарный файл
+        headers: {
+          'Accept': 'application/pdf,image/*',
+          'Content-Type': 'multipart/form-data'
+        },
+        withCredentials: false
       });
+      
+      // Проверяем статус ответа
+      if (response.status !== 200) {
+        throw new Error(`Ошибка сервера: ${response.status}`);
+      }
       
       // Определяем тип ответа
       const contentType = response.headers['content-type'];
+      console.log('Получен предпросмотр с типом:', contentType);
       
-      // Создаем URL объект для отображения
-      const blob = new Blob([response.data], { type: contentType });
-      const url = URL.createObjectURL(blob);
-      
-      // Сохраняем URL для предпросмотра
-      setPreviewUrl(url);
-      setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
+      if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
+        // Создаем URL объект для отображения
+        const blob = new Blob([response.data], { type: contentType });
+        const url = URL.createObjectURL(blob);
+        
+        // Сохраняем URL для предпросмотра
+        setPreviewUrl(url);
+        setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
+      } else {
+        // Если содержимое не PDF или изображение, попробуем интерпретировать его как текст ошибки
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const result = reader.result;
+            const errorMessage = result.includes('{') 
+              ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
+              : result;
+            setError(`Ошибка превью: ${errorMessage}`);
+          } catch (e) {
+            setError('Произошла неизвестная ошибка при обработке ответа сервера');
+          }
+        };
+        reader.readAsText(response.data);
+      }
     } catch (err) {
       console.error('Ошибка при загрузке предпросмотра:', err);
-      setError('Не удалось загрузить предпросмотр. Попробуйте еще раз.');
+      
+      // Более детальная информация об ошибке
+      if (err.response) {
+        // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
+        setError(`Ошибка сервера (${err.response.status}). Пожалуйста, попробуйте позже.`);
+      } else if (err.request) {
+        // Запрос был сделан, но ответ не получен
+        setError('Не удалось получить ответ от сервера. Проверьте подключение к интернету.');
+      } else {
+        // Произошла ошибка при настройке запроса
+        setError(`Ошибка: ${err.message}`);
+      }
     } finally {
       setPreviewLoading(false);
     }
@@ -238,19 +279,36 @@ const PropisiForm = () => {
       // URL API бэкенда
       const apiUrl = `${config.API_URL}/generate-pdf`;
       
+      console.log('Отправляем запрос на:', apiUrl);
+      
       // Отправляем запрос на генерацию PDF
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем PDF как бинарный файл
+        headers: {
+          'Accept': 'application/pdf',
+          'Content-Type': 'multipart/form-data'
+        },
+        withCredentials: false
       });
 
-      // Проверяем, что получили PDF
-      if (response.headers['content-type'] === 'application/pdf') {
+      // Проверяем статус ответа
+      if (response.status !== 200) {
+        throw new Error(`Ошибка сервера: ${response.status}`);
+      }
+
+      // Проверяем тип контента
+      const contentType = response.headers['content-type'];
+      console.log('Получен ответ с типом:', contentType);
+      
+      // Проверяем, что получили PDF или изображение
+      if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
         // Создаем URL для скачивания PDF
-        const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+        const pdfBlob = new Blob([response.data], { type: contentType });
         const url = URL.createObjectURL(pdfBlob);
         
         // Сохраняем URL для предпросмотра
         setPreviewUrl(url);
+        setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
         
         // Создаем ссылку для скачивания
         const link = document.createElement('a');
@@ -260,11 +318,34 @@ const PropisiForm = () => {
         link.click();
         link.remove();
       } else {
-        throw new Error('Сервер не вернул PDF документ');
+        // Если содержимое не PDF, попробуем интерпретировать его как текст ошибки
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const result = reader.result;
+            const errorMessage = result.includes('{') 
+              ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
+              : result;
+            setError(`Ошибка: ${errorMessage}`);
+          } catch (e) {
+            setError('Произошла неизвестная ошибка при обработке ответа сервера');
+          }
+        };
+        reader.readAsText(response.data);
       }
     } catch (err) {
       console.error('Ошибка при генерации PDF:', err);
-      setError('Произошла ошибка при генерации PDF. Пожалуйста, попробуйте еще раз.');
+      // Более детальная информация об ошибке
+      if (err.response) {
+        // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
+        setError(`Ошибка сервера (${err.response.status}). Пожалуйста, попробуйте позже.`);
+      } else if (err.request) {
+        // Запрос был сделан, но ответ не получен
+        setError('Не удалось получить ответ от сервера. Проверьте подключение к интернету.');
+      } else {
+        // Произошла ошибка при настройке запроса
+        setError(`Ошибка: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
