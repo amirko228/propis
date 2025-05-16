@@ -1,7 +1,9 @@
 // Конфигурация приложения
 const config = {
   // URL API бэкенда
-  API_URL: process.env.REACT_APP_API_URL || 'https://propisi-api.onrender.com',
+  API_URL: process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:8000' 
+    : 'https://propis-api-2.onrender.com',
   
   // Названия вариантов заполнения
   FILL_TYPES: {
@@ -30,5 +32,8 @@ const config = {
     landscape: 'Альбомная'
   }
 };
+
+// Логгирование используемого API URL для отладки
+console.log('Используется API URL:', config.API_URL);
 
 export default config; 

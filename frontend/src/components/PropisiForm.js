@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 // Библиотека успешно установлена
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -164,6 +164,20 @@ const PropisiForm = () => {
   const [previewUrl, setPreviewUrl] = useState(null);
   // Тип предпросмотра ('image' или 'pdf')
   const [previewType, setPreviewType] = useState(null);
+  // Информационное сообщение
+  const [infoMessage, setInfoMessage] = useState(null);
+
+  // Проверка доступности API при загрузке компонента
+  useEffect(() => {
+    const checkApi = async () => {
+      const isAvailable = await checkApiAvailability();
+      if (!isAvailable) {
+        setInfoMessage('Сервер генерации прописей загружается. Первый запрос может занять до 30 секунд.');
+      }
+    };
+    
+    checkApi();
+  }, []);
 
   // Обработчик изменения полей формы
   const handleChange = (e) => {
@@ -182,20 +196,39 @@ const PropisiForm = () => {
     });
   };
 
+  // Функция проверки доступности API
+  const checkApiAvailability = async () => {
+    try {
+      await axios.get(`${config.API_URL}/`, { timeout: 5000 });
+      return true;
+    } catch (err) {
+      console.error('API недоступен:', err);
+      return false;
+    }
+  };
+
   // Функция для загрузки предпросмотра
   const loadPreview = async () => {
     if (previewLoading) return;
     
     setPreviewLoading(true);
     setError(null);
-    
-    // Создаем FormData для отправки на сервер
-    const formPayload = new FormData();
-    for (const key in formData) {
-      formPayload.append(key, formData[key]);
-    }
+    setInfoMessage('Генерация предпросмотра может занять до 25 секунд, если сервер только что запустился...');
     
     try {
+      // Проверка доступности API
+      const isApiAvailable = await checkApiAvailability();
+      if (!isApiAvailable) {
+        setError('Сервер API недоступен. Пожалуйста, повторите попытку позже.');
+        return;
+      }
+      
+      // Создаем FormData для отправки на сервер
+      const formPayload = new FormData();
+      for (const key in formData) {
+        formPayload.append(key, formData[key]);
+      }
+      
       // URL API для предпросмотра
       const apiUrl = `${config.API_URL}/preview`;
       
@@ -208,6 +241,7 @@ const PropisiForm = () => {
           'Accept': 'application/pdf,image/*',
           'Content-Type': 'multipart/form-data'
         },
+        timeout: 25000, // Увеличиваем таймаут до 25 секунд
         withCredentials: false
       });
       
@@ -248,15 +282,17 @@ const PropisiForm = () => {
       console.error('Ошибка при загрузке предпросмотра:', err);
       
       // Более детальная информация об ошибке
-      if (err.response) {
+      if (err.code === 'ECONNABORTED') {
+        setError('Превышено время ожидания ответа от сервера. Сервер может быть перегружен.');
+      } else if (err.response) {
         // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
-        setError(`Ошибка сервера (${err.response.status}). Пожалуйста, попробуйте позже.`);
+        setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Пожалуйста, попробуйте позже'}`);
       } else if (err.request) {
         // Запрос был сделан, но ответ не получен
-        setError('Не удалось получить ответ от сервера. Проверьте подключение к интернету.');
+        setError('Не удалось получить ответ от сервера. Сервер может быть недоступен.');
       } else {
         // Произошла ошибка при настройке запроса
-        setError(`Ошибка: ${err.message}`);
+        setError(`Ошибка запроса: ${err.message}`);
       }
     } finally {
       setPreviewLoading(false);
@@ -268,14 +304,22 @@ const PropisiForm = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
-    // Создаем FormData для отправки на сервер
-    const formPayload = new FormData();
-    for (const key in formData) {
-      formPayload.append(key, formData[key]);
-    }
+    setInfoMessage('Генерация PDF может занять до 30 секунд, если сервер только что запустился...');
 
     try {
+      // Проверка доступности API
+      const isApiAvailable = await checkApiAvailability();
+      if (!isApiAvailable) {
+        setError('Сервер API недоступен. Пожалуйста, повторите попытку позже.');
+        return;
+      }
+      
+      // Создаем FormData для отправки на сервер
+      const formPayload = new FormData();
+      for (const key in formData) {
+        formPayload.append(key, formData[key]);
+      }
+
       // URL API бэкенда
       const apiUrl = `${config.API_URL}/generate-pdf`;
       
@@ -288,6 +332,7 @@ const PropisiForm = () => {
           'Accept': 'application/pdf',
           'Content-Type': 'multipart/form-data'
         },
+        timeout: 30000, // Увеличиваем таймаут до 30 секунд
         withCredentials: false
       });
 
@@ -335,16 +380,19 @@ const PropisiForm = () => {
       }
     } catch (err) {
       console.error('Ошибка при генерации PDF:', err);
+      
       // Более детальная информация об ошибке
-      if (err.response) {
+      if (err.code === 'ECONNABORTED') {
+        setError('Превышено время ожидания ответа от сервера. Сервер может быть перегружен.');
+      } else if (err.response) {
         // Запрос был сделан, и сервер ответил кодом состояния, который не входит в диапазон 2xx
-        setError(`Ошибка сервера (${err.response.status}). Пожалуйста, попробуйте позже.`);
+        setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Пожалуйста, попробуйте позже'}`);
       } else if (err.request) {
         // Запрос был сделан, но ответ не получен
-        setError('Не удалось получить ответ от сервера. Проверьте подключение к интернету.');
+        setError('Сервер не отвечает. Пожалуйста, проверьте подключение к интернету или повторите попытку позже.');
       } else {
         // Произошла ошибка при настройке запроса
-        setError(`Ошибка: ${err.message}`);
+        setError(`Ошибка запроса: ${err.message}`);
       }
     } finally {
       setLoading(false);
@@ -515,6 +563,11 @@ const PropisiForm = () => {
         {/* Сообщение об ошибке */}
         {error && <div className="error-message">{error}</div>}
 
+        {/* Информационное сообщение */}
+        {infoMessage && !error && (loading || previewLoading) && (
+          <div className="info-message">{infoMessage}</div>
+        )}
+        
         {/* Кнопки управления */}
         <div className="button-group">
           {/* Кнопка предпросмотра */}
