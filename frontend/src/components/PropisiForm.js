@@ -170,6 +170,10 @@ const PropisiForm = () => {
   const [currentApiUrl, setCurrentApiUrl] = useState(config.API_URL);
   // Индекс текущего API сервера
   const [currentApiIndex, setCurrentApiIndex] = useState(0);
+  // Состояние скачивания
+  const [downloadStarted, setDownloadStarted] = useState(false);
+  // Последний сгенерированный PDF URL
+  const [lastPdfUrl, setLastPdfUrl] = useState(null);
 
   // Функция для переключения на следующий доступный API
   const switchToNextApi = () => {
@@ -356,12 +360,62 @@ const PropisiForm = () => {
     setPreviewLoading(false);
   };
 
+  // Функция для скачивания файла
+  const downloadFile = (url, filename = 'propisi.pdf') => {
+    try {
+      console.log('Инициализация скачивания файла...');
+      setDownloadStarted(true);
+      
+      // Создаем ссылку для скачивания
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      // Добавляем ссылку в DOM
+      document.body.appendChild(link);
+      
+      // Добавляем отслеживание событий
+      link.addEventListener('click', () => {
+        console.log('Клик по ссылке произошел');
+        setTimeout(() => setDownloadStarted(false), 2000);
+      });
+      
+      // Имитация клика
+      console.log('Запуск скачивания...');
+      link.click();
+      
+      // Удаление ссылки с задержкой
+      setTimeout(() => {
+        document.body.removeChild(link);
+        console.log('Ссылка скачивания удалена из DOM');
+      }, 100);
+      
+      return true;
+    } catch (err) {
+      console.error('Ошибка при скачивании файла:', err);
+      setError(`Ошибка при скачивании: ${err.message}. Попробуйте еще раз.`);
+      setDownloadStarted(false);
+      return false;
+    }
+  };
+
+  // Функция для повторного скачивания
+  const retryDownload = () => {
+    if (lastPdfUrl) {
+      console.log('Повторная попытка скачивания...');
+      downloadFile(lastPdfUrl);
+    } else {
+      setError('Нет доступного файла для скачивания. Пожалуйста, сгенерируйте PDF заново.');
+    }
+  };
+
   // Обработчик отправки формы
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setInfoMessage('Генерация PDF, пожалуйста подождите...');
+    setDownloadStarted(false);
+    setLastPdfUrl(null);
     
     // Создаем FormData для отправки на сервер
     const formPayload = new FormData();
@@ -379,6 +433,7 @@ const PropisiForm = () => {
         // Проверка доступности текущего API
         const isApiAvailable = await checkApiAvailability(apiUrl);
         if (!isApiAvailable) {
+          console.log(`API ${apiUrl} недоступен, переключаемся на следующий`);
           apiUrl = switchToNextApi();
           attempts++;
           continue;
@@ -395,7 +450,7 @@ const PropisiForm = () => {
             'Accept': 'application/pdf',
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 40000, // Увеличиваем таймаут до 40 секунд
+          timeout: 60000, // Увеличиваем таймаут до 60 секунд
           withCredentials: false
         });
         
@@ -407,6 +462,7 @@ const PropisiForm = () => {
         // Проверяем тип контента
         const contentType = response.headers['content-type'];
         console.log('Получен ответ с типом:', contentType);
+        console.log('Размер данных:', response.data.size, 'байт');
         
         // Проверяем, что получили PDF или изображение
         if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
@@ -414,32 +470,35 @@ const PropisiForm = () => {
           const pdfBlob = new Blob([response.data], { type: contentType });
           const url = URL.createObjectURL(pdfBlob);
           
-          // Сохраняем URL для предпросмотра
+          // Сохраняем URL для предпросмотра и будущего скачивания
           setPreviewUrl(url);
           setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
+          setLastPdfUrl(url);
           
-          // Создаем ссылку для скачивания
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', 'propisi.pdf');
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
+          // Запускаем скачивание
+          const downloadSuccess = downloadFile(url);
           
           success = true;
-          setInfoMessage(null);
+          if (downloadSuccess) {
+            setInfoMessage('PDF успешно сгенерирован. Если скачивание не началось автоматически, нажмите "Скачать снова".');
+          } else {
+            setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
+          }
         } else {
           // Если содержимое не PDF, попробуем интерпретировать его как текст ошибки
           const reader = new FileReader();
           reader.onload = () => {
             try {
               const result = reader.result;
+              console.log('Текст ответа:', result);
               const errorMessage = result.includes('{') 
                 ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
                 : result;
               setError(`Ошибка: ${errorMessage}`);
+              console.error('Ошибка в ответе сервера:', errorMessage);
             } catch (e) {
               setError('Произошла неизвестная ошибка при обработке ответа сервера');
+              console.error('Ошибка при обработке ответа:', e);
             }
           };
           reader.readAsText(response.data);
@@ -458,11 +517,11 @@ const PropisiForm = () => {
         // Если перепробовали все API, показываем ошибку
         if (attempts >= config.API_URLS.length) {
           if (err.code === 'ECONNABORTED') {
-            setError('Превышено время ожидания ответа. Все серверы перегружены, попробуйте позже.');
+            setError('Превышено время ожидания ответа. Серверы перегружены, попробуйте позже.');
           } else if (err.response) {
             setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
           } else if (err.request) {
-            setError('Все серверы не отвечают. Попробуйте позже или проверьте подключение к интернету.');
+            setError('Серверы не отвечают. Пожалуйста, проверьте подключение к интернету и попробуйте позже.');
           } else {
             setError(`Ошибка: ${err.message}`);
           }
@@ -638,8 +697,17 @@ const PropisiForm = () => {
         {error && <div className="error-message">{error}</div>}
 
         {/* Информационное сообщение */}
-        {infoMessage && !error && (loading || previewLoading) && (
-          <div className="info-message">{infoMessage}</div>
+        {infoMessage && (
+          <div className={`info-message ${error ? 'info-hidden' : ''}`}>
+            {infoMessage}
+            {(loading || previewLoading) && (
+              <span className="loading-dots">
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+                <span className="dot">.</span>
+              </span>
+            )}
+          </div>
         )}
         
         {/* Кнопки управления */}
@@ -662,6 +730,18 @@ const PropisiForm = () => {
           >
             {loading ? 'Генерация...' : 'Сгенерировать пропись'}
           </button>
+          
+          {/* Кнопка повторного скачивания */}
+          {lastPdfUrl && (
+            <button 
+              type="button"
+              className="button button-secondary"
+              onClick={retryDownload}
+              disabled={loading || previewLoading}
+            >
+              Скачать снова
+            </button>
+          )}
         </div>
 
         {/* Предпросмотр */}
