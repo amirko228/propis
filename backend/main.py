@@ -27,10 +27,10 @@ app = FastAPI(title="Генератор прописей")
 # Настройка CORS - максимально открытая для тестирования
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешаем все источники
+    allow_origins=["*", "https://propis.vercel.app", "http://localhost:3000", "http://localhost:8000"],  # Разрешаем все источники и конкретные домены
     allow_credentials=True,
-    allow_methods=["*"],  # Разрешаем все методы
-    allow_headers=["*"],  # Разрешаем все заголовки
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Указываем конкретные методы
+    allow_headers=["*", "Content-Type", "Authorization"],  # Разрешаем все заголовки и конкретные
 )
 
 # Модель данных для запроса
@@ -367,9 +367,13 @@ async def generate_preview(request: Request):
         return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
     except Exception as e:
         print(f"Ошибка в /api/preview: {str(e)}")
+        # Более подробная обработка ошибок
+        error_message = f"Произошла ошибка: {str(e)}"
+        print(error_message)
+        
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": f"Произошла ошибка: {str(e)}"}
+            content={"status": "error", "message": error_message, "error_details": str(e)}
         )
 
 # Добавляем маршрут для просмотра предпросмотра
@@ -532,9 +536,14 @@ async def generate_pdf(request: Request):
         return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
     except Exception as e:
         print(f"Ошибка в /api/generate-pdf: {str(e)}")
+        # Более подробная обработка ошибок для отладки
+        error_type = type(e).__name__
+        error_message = f"Произошла ошибка типа {error_type}: {str(e)}"
+        print(error_message)
+        
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": f"Произошла ошибка: {str(e)}"}
+            content={"status": "error", "message": error_message, "error_details": str(e), "error_type": error_type}
         )
 
 # Удаление временных файлов при выключении сервера
