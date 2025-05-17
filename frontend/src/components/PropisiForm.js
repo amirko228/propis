@@ -7,134 +7,21 @@ import OptionCard from './OptionCard';
 // Устанавливаем worker для pdf.js
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
-// Компонент предпросмотра (может отображать как PDF, так и изображения)
-const PreviewViewer = ({ previewUrl, previewType }) => {
-  const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState(0.8); // Масштаб по умолчанию 80%
-  const [imgScale, setImgScale] = useState(0.8); // Отдельный масштаб для изображений
-
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
-  };
-
-  // Увеличение масштаба
-  const zoomIn = () => {
-    if (scale < 1.5) {
-      setScale(scale + 0.1);
-    }
-  };
-
-  // Уменьшение масштаба
-  const zoomOut = () => {
-    if (scale > 0.5) {
-      setScale(scale - 0.1);
-    }
-  };
-
-  // Увеличение масштаба для изображения
-  const zoomInImage = () => {
-    if (imgScale < 1.5) {
-      setImgScale(imgScale + 0.1);
-    }
-  };
-
-  // Уменьшение масштаба для изображения
-  const zoomOutImage = () => {
-    if (imgScale > 0.5) {
-      setImgScale(imgScale - 0.1);
-    }
-  };
-
-  // Если предпросмотр - это изображение
-  if (previewType === 'image') {
-    return (
-      <div className="preview-viewer">
-        <div className="image-container">
-          <img 
-            src={previewUrl} 
-            alt="Предпросмотр прописи"
-            style={{ 
-              maxWidth: '100%', 
-              border: '1px solid #ddd',
-              transform: `scale(${imgScale})`,
-              transformOrigin: 'top center',
-              transition: 'transform 0.2s ease'
-            }} 
-          />
-        </div>
-        
-        <div className="pdf-controls">
-          <button 
-            onClick={zoomOutImage} 
-            disabled={imgScale <= 0.5}
-            title="Уменьшить"
-          >
-            −
-          </button>
-          <span title="Масштаб">{Math.round(imgScale * 100)}%</span>
-          <button 
-            onClick={zoomInImage} 
-            disabled={imgScale >= 1.5}
-            title="Увеличить"
-          >
-            +
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Если предпросмотр - это PDF
+// Компонент предпросмотра (теперь будет просто отображать текстовое сообщение)
+const PreviewViewer = ({ message }) => {
+  if (!message) return null;
+  
   return (
-    <div className="preview-viewer">
-      <Document
-        file={previewUrl}
-        onLoadSuccess={onDocumentLoadSuccess}
-        error="Ошибка загрузки PDF"
-        loading="Загрузка PDF..."
-      >
-        <Page 
-          pageNumber={pageNumber} 
-          scale={scale} 
-          className="pdf-page"
-        />
-      </Document>
-      <div className="pdf-controls">
-        <button 
-          disabled={pageNumber <= 1} 
-          onClick={() => setPageNumber(pageNumber - 1)}
-          title="Предыдущая страница"
-        >
-          ←
-        </button>
-        <p>
-          Стр. {pageNumber} из {numPages}
-        </p>
-        <button 
-          disabled={pageNumber >= numPages} 
-          onClick={() => setPageNumber(pageNumber + 1)}
-          title="Следующая страница"
-        >
-          →
-        </button>
-        
-        <button 
-          onClick={zoomOut} 
-          disabled={scale <= 0.5}
-          title="Уменьшить"
-          style={{ marginLeft: '15px' }}
-        >
-          −
-        </button>
-        <span title="Масштаб">{Math.round(scale * 100)}%</span>
-        <button 
-          onClick={zoomIn} 
-          disabled={scale >= 1.5}
-          title="Увеличить"
-        >
-          +
-        </button>
+    <div className="preview-message">
+      <div style={{ 
+        padding: '20px', 
+        backgroundColor: '#f9f9f9', 
+        border: '1px solid #ddd',
+        borderRadius: '5px',
+        margin: '10px 0'
+      }}>
+        <h3>Результат обработки:</h3>
+        <p>{message}</p>
       </div>
     </div>
   );
@@ -159,10 +46,10 @@ const PropisiForm = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   // Состояние ошибки
   const [error, setError] = useState(null);
-  // Состояние предпросмотра
-  const [previewUrl, setPreviewUrl] = useState(null);
-  // Тип предпросмотра ('image' или 'pdf')
-  const [previewType, setPreviewType] = useState(null);
+  // Сообщение о результате операции
+  const [resultMessage, setResultMessage] = useState(null);
+  // Флаг успешной операции
+  const [success, setSuccess] = useState(false);
 
   // Обработчик изменения полей формы
   const handleChange = (e) => {
@@ -171,6 +58,9 @@ const PropisiForm = () => {
       ...formData,
       [name]: value
     });
+    
+    // Сбрасываем сообщения об ошибках при изменении формы
+    setError(null);
   };
 
   // Обработчик выбора опции
@@ -179,14 +69,19 @@ const PropisiForm = () => {
       ...formData,
       [option]: value
     });
+    
+    // Сбрасываем сообщения об ошибках при изменении формы
+    setError(null);
   };
 
-  // Функция для загрузки предпросмотра
-  const loadPreview = async () => {
+  // Функция для предпросмотра
+  const handlePreview = async () => {
     if (previewLoading) return;
     
     setPreviewLoading(true);
     setError(null);
+    setResultMessage(null);
+    setSuccess(false);
     
     // Создаем FormData для отправки на сервер
     const formPayload = new FormData();
@@ -195,38 +90,29 @@ const PropisiForm = () => {
     }
     
     try {
-      // URL API для предпросмотра - используем явно указанный URL без API_URL
-      // Так как у нас все на одном домене
       const apiUrl = `/api/preview`;
-      console.log('Отправка запроса на предпросмотр:', apiUrl);
+      console.log('Отправка запроса на предпросмотр');
       
-      console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
-      
-      // Отправляем запрос на генерацию предпросмотра
+      // Отправляем запрос на сервер
       const response = await axios.post(apiUrl, formPayload, {
-        responseType: 'json', // Изменяем тип ответа с blob на json
-        timeout: 60000, // 60 секунд таймаут
         headers: {
-          'Accept': 'application/pdf, image/*',
           'Content-Type': 'multipart/form-data'
         }
       });
       
-      // Обрабатываем JSON ответ
+      // Обрабатываем успешный ответ
+      console.log('Получен ответ:', response.data);
+      
       if (response.data && response.data.message) {
-        // Показываем пользователю информацию о успешной обработке
-        alert(`Предпросмотр: ${response.data.message}`);
-        setPreviewUrl(response.data.url);
-        const previewType = response.data.type === 'image' ? 'image' : 'pdf';
-        setPreviewType(previewType);
-        console.log('Установлен тип предпросмотра:', previewType);
+        setResultMessage(`Предпросмотр успешно обработан. ${response.data.message}`);
+        setSuccess(true);
       } else {
-        // Если формат ответа не соответствует ожидаемому
-        throw new Error('Неожиданный формат ответа от сервера');
+        throw new Error('Получен неожиданный формат ответа от сервера');
       }
     } catch (err) {
-      console.error('Ошибка при загрузке предпросмотра:', err);
-      setError('Не удалось загрузить предпросмотр. Попробуйте еще раз.');
+      console.error('Ошибка при предпросмотре:', err);
+      setError(err.response?.data?.message || err.message || 'Произошла ошибка при предпросмотре');
+      setSuccess(false);
     } finally {
       setPreviewLoading(false);
     }
@@ -237,6 +123,8 @@ const PropisiForm = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setResultMessage(null);
+    setSuccess(false);
 
     // Создаем FormData для отправки на сервер
     const formPayload = new FormData();
@@ -245,34 +133,29 @@ const PropisiForm = () => {
     }
 
     try {
-      // URL API бэкенда - используем явно указанный URL без API_URL
-      // Так как у нас все на одном домене
       const apiUrl = `/api/generate-pdf`;
-      console.log('Отправка запроса на генерацию PDF:', apiUrl);
+      console.log('Отправка запроса на генерацию');
       
-      console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
-      
-      // Отправляем запрос на генерацию PDF
+      // Отправляем запрос на сервер
       const response = await axios.post(apiUrl, formPayload, {
-        responseType: 'json', // Изменяем тип ответа с blob на json
-        timeout: 60000, // 60 секунд таймаут
         headers: {
-          'Accept': 'application/pdf',
           'Content-Type': 'multipart/form-data'
         }
       });
 
-      // Обрабатываем JSON ответ
+      // Обрабатываем успешный ответ
+      console.log('Получен ответ:', response.data);
+      
       if (response.data && response.data.message) {
-        // Показываем пользователю информацию о успешной обработке
-        alert(`Успешно: ${response.data.message}`);
+        setResultMessage(`Пропись успешно обработана! ${response.data.message}`);
+        setSuccess(true);
       } else {
-        // Если формат ответа не соответствует ожидаемому
-        throw new Error('Неожиданный формат ответа от сервера');
+        throw new Error('Получен неожиданный формат ответа от сервера');
       }
     } catch (err) {
-      console.error('Ошибка при генерации PDF:', err);
-      setError('Произошла ошибка при генерации PDF. Пожалуйста, попробуйте еще раз.');
+      console.error('Ошибка при генерации:', err);
+      setError(err.response?.data?.message || err.message || 'Произошла ошибка при генерации');
+      setSuccess(false);
     } finally {
       setLoading(false);
     }
@@ -285,6 +168,34 @@ const PropisiForm = () => {
       <div className="form-description">
         <p>Создавайте красивые прописи для обучения детей письму. Выберите варианты оформления и введите нужный текст.</p>
       </div>
+      
+      {/* Отображаем сообщение об успехе, если оно есть */}
+      {success && resultMessage && (
+        <div className="success-message" style={{ 
+          backgroundColor: '#d4edda', 
+          color: '#155724', 
+          padding: '10px 15px',
+          margin: '10px 0',
+          borderRadius: '4px',
+          border: '1px solid #c3e6cb'
+        }}>
+          {resultMessage}
+        </div>
+      )}
+      
+      {/* Отображаем сообщение об ошибке, если оно есть */}
+      {error && (
+        <div className="error-message" style={{ 
+          backgroundColor: '#f8d7da', 
+          color: '#721c24', 
+          padding: '10px 15px',
+          margin: '10px 0',
+          borderRadius: '4px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <strong>Ошибка:</strong> {error}
+        </div>
+      )}
       
       <form onSubmit={handleSubmit}>
         {/* Секция разметки страницы */}
@@ -439,16 +350,13 @@ const PropisiForm = () => {
           <div className="form-hint">Пустые строки останутся пустыми на странице, а длинные перенесутся автоматически</div>
         </div>
 
-        {/* Сообщение об ошибке */}
-        {error && <div className="error-message">{error}</div>}
-
         {/* Кнопки управления */}
         <div className="button-group">
           {/* Кнопка предпросмотра */}
           <button 
             type="button" 
             className="button button-secondary" 
-            onClick={loadPreview} 
+            onClick={handlePreview} 
             disabled={previewLoading || loading}
           >
             {previewLoading ? 'Загрузка...' : 'Предпросмотр'}
@@ -464,11 +372,10 @@ const PropisiForm = () => {
           </button>
         </div>
 
-        {/* Предпросмотр */}
-        {previewUrl && (
+        {/* Отображаем результат операции */}
+        {resultMessage && (
           <div className="preview-container">
-            <h3>Предпросмотр:</h3>
-            <PreviewViewer previewUrl={previewUrl} previewType={previewType} />
+            <PreviewViewer message={resultMessage} />
           </div>
         )}
       </form>

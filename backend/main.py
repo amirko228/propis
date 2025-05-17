@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, File, UploadFile, HTTPException
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Request
 from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -170,93 +170,51 @@ def draw_propisi_lines(c, x, y, width, line_height, count, oblique=False):
                 c.line(start_x, start_y, end_x, end_y)
 
 @app.post("/api/generate-pdf")
-async def generate_pdf(
-    task: Annotated[str, Form()],
-    fill_type: Annotated[str, Form()],
-    text: Annotated[str, Form()],
-    page_layout: Annotated[str, Form()],
-    font_type: Annotated[str, Form()],
-    page_orientation: Annotated[str, Form()],
-    student_name: Annotated[Union[str, None], Form()] = None
-):
+async def generate_pdf(request: Request):
     """
-    Крайне упрощенная версия API для диагностики
+    Максимально упрощенное API для генерации PDF.
+    Просто подтверждает получение запроса без какой-либо обработки.
     """
     try:
-        # Создаем объект с данными, которые мы получили
-        response_data = {
-            "message": "Запрос успешно обработан",
-            "task": task,
-            "fill_type": fill_type,
-            "text_sample": text[:50] + "..." if len(text) > 50 else text,
-            "page_layout": page_layout,
-            "font_type": font_type,
-            "page_orientation": page_orientation,
-            "student_name": student_name,
-            "timestamp": str(datetime.datetime.now())
+        # Просто возвращаем успешный ответ без какой-либо обработки
+        return {
+            "status": "success",
+            "message": "Запрос на генерацию прописи был успешно получен. Спасибо!"
         }
-        
-        # Возвращаем простой JSON без попыток создания PDF
-        return JSONResponse(content=response_data)
     except Exception as e:
-        # Подробное логирование ошибки
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"ОШИБКА В GENERATE_PDF: {str(e)}")
-        print(error_trace)
+        # Логируем ошибку
+        print(f"Ошибка в /api/generate-pdf: {str(e)}")
         
-        # Возвращаем ошибку в формате JSON
+        # Возвращаем простой ответ об ошибке
         return JSONResponse(
             status_code=500,
             content={
-                "error": str(e),
-                "error_type": type(e).__name__,
+                "status": "error",
                 "message": "Произошла ошибка при обработке запроса"
             }
         )
 
 @app.post("/api/preview")
-async def generate_preview(
-    task: Annotated[str, Form()],
-    fill_type: Annotated[str, Form()],
-    text: Annotated[str, Form()], 
-    page_layout: Annotated[str, Form()],
-    font_type: Annotated[str, Form()],
-    page_orientation: Annotated[str, Form()],
-    student_name: Annotated[Union[str, None], Form()] = None
-):
+async def generate_preview(request: Request):
     """
-    Крайне упрощенная версия API для предпросмотра для диагностики
+    Максимально упрощенное API для предпросмотра.
+    Просто подтверждает получение запроса без какой-либо обработки.
     """
     try:
-        # Создаем объект с данными, которые мы получили
-        response_data = {
-            "message": "Запрос предпросмотра успешно обработан",
-            "task": task,
-            "fill_type": fill_type,
-            "text_sample": text[:30] + "..." if len(text) > 30 else text,
-            "page_layout": page_layout,
-            "font_type": font_type,
-            "page_orientation": page_orientation,
-            "student_name": student_name,
-            "timestamp": str(datetime.datetime.now())
+        # Просто возвращаем успешный ответ без какой-либо обработки
+        return {
+            "status": "success",
+            "message": "Запрос на предпросмотр был успешно получен. Спасибо!"
         }
-        
-        # Возвращаем простой JSON без попыток создания PDF
-        return JSONResponse(content=response_data)
     except Exception as e:
-        # Подробное логирование ошибки
-        import traceback
-        error_trace = traceback.format_exc()
-        print(f"ОШИБКА В PREVIEW: {str(e)}")
-        print(error_trace)
+        # Логируем ошибку
+        print(f"Ошибка в /api/preview: {str(e)}")
         
-        # Возвращаем ошибку в формате JSON
+        # Возвращаем простой ответ об ошибке
         return JSONResponse(
             status_code=500,
             content={
-                "error": str(e),
-                "error_type": type(e).__name__,
+                "status": "error",
                 "message": "Произошла ошибка при обработке запроса предпросмотра"
             }
         )
