@@ -198,15 +198,48 @@ const PropisiForm = () => {
     try {
       // URL API для предпросмотра
       const apiUrl = `${config.API_URL}/api/preview`;
+      console.log('Отправка запроса на предпросмотр:', apiUrl);
+      
+      // Проверяем, что API URL не пустой
+      if (!apiUrl || apiUrl === '/api/preview') {
+        throw new Error('Неправильно настроен API URL. Проверьте конфигурацию.');
+      }
+      
+      console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
       
       // Отправляем запрос на генерацию предпросмотра
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем данные как бинарный файл
+        timeout: 30000, // 30 секунд таймаут
+        headers: {
+          'Accept': 'application/pdf, image/*'
+        }
       });
       
       // Определяем тип ответа
       const contentType = response.headers['content-type'] || 'application/pdf';
       console.log('Получен тип контента:', contentType);
+      console.log('Размер полученных данных:', response.data.size, 'байт');
+      
+      // Если пришел текст ошибки вместо бинарных данных
+      if (response.data.size < 100) {
+        try {
+          // Попробуем прочитать текст ошибки
+          const reader = new FileReader();
+          reader.onload = () => {
+            const textError = reader.result;
+            console.error('Ошибка от сервера:', textError);
+            setError(`Ошибка от сервера: ${textError}`);
+          };
+          reader.onerror = () => {
+            console.error('Не удалось прочитать ответ');
+          };
+          reader.readAsText(response.data);
+          throw new Error('Сервер вернул ошибку вместо предпросмотра');
+        } catch (readError) {
+          console.error('Ошибка чтения ответа:', readError);
+        }
+      }
       
       // Создаем URL объект для отображения
       const blob = new Blob([response.data], { type: contentType });
@@ -214,8 +247,9 @@ const PropisiForm = () => {
       
       // Сохраняем URL для предпросмотра
       setPreviewUrl(url);
-      setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
-      console.log('Установлен тип предпросмотра:', contentType.includes('image') ? 'image' : 'pdf');
+      const previewType = contentType.includes('image') ? 'image' : 'pdf';
+      setPreviewType(previewType);
+      console.log('Установлен тип предпросмотра:', previewType);
     } catch (err) {
       console.error('Ошибка при загрузке предпросмотра:', err);
       setError('Не удалось загрузить предпросмотр. Попробуйте еще раз.');
@@ -239,30 +273,73 @@ const PropisiForm = () => {
     try {
       // URL API бэкенда
       const apiUrl = `${config.API_URL}/api/generate-pdf`;
+      console.log('Отправка запроса на генерацию PDF:', apiUrl);
+      
+      // Проверяем, что API URL не пустой
+      if (!apiUrl || apiUrl === '/api/generate-pdf') {
+        throw new Error('Неправильно настроен API URL. Проверьте конфигурацию.');
+      }
+      
+      console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
       
       // Отправляем запрос на генерацию PDF
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем PDF как бинарный файл
+        timeout: 30000, // 30 секунд таймаут
+        headers: {
+          'Accept': 'application/pdf'
+        }
       });
 
       // Проверяем, что получили PDF
       const contentType = response.headers['content-type'];
+      console.log('Получен тип контента при генерации PDF:', contentType);
+      console.log('Размер полученных данных:', response.data.size, 'байт');
+      
+      // Если пришел текст ошибки вместо бинарных данных
+      if (response.data.size < 100) {
+        try {
+          // Попробуем прочитать текст ошибки
+          const reader = new FileReader();
+          reader.onload = () => {
+            const textError = reader.result;
+            console.error('Ошибка от сервера при генерации PDF:', textError);
+            setError(`Ошибка от сервера: ${textError}`);
+          };
+          reader.onerror = () => {
+            console.error('Не удалось прочитать ответ');
+          };
+          reader.readAsText(response.data);
+          throw new Error('Сервер вернул ошибку вместо PDF');
+        } catch (readError) {
+          console.error('Ошибка чтения ответа:', readError);
+        }
+      }
+      
       if (contentType === 'application/pdf' || contentType.includes('application/pdf')) {
         // Создаем URL для скачивания PDF
         const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(pdfBlob);
+        console.log('PDF URL создан успешно');
         
         // Сохраняем URL для предпросмотра
         setPreviewUrl(url);
         setPreviewType('pdf');
         
         // Создаем ссылку для скачивания
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'propisi.pdf');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        try {
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'propisi.pdf');
+          document.body.appendChild(link);
+          console.log('Начинаем скачивание PDF');
+          link.click();
+          link.remove();
+          console.log('Скачивание PDF инициировано');
+        } catch (downloadError) {
+          console.error('Ошибка при скачивании PDF:', downloadError);
+          setError('Ошибка при скачивании PDF. Попробуйте еще раз.');
+        }
       } else {
         console.error('Неверный тип контента:', contentType);
         throw new Error(`Сервер не вернул PDF документ. Получен тип: ${contentType}`);

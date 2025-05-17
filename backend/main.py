@@ -23,13 +23,19 @@ from reportlab.pdfbase import _fontdata
 
 app = FastAPI(title="Генератор прописей")
 
-# Настройка CORS
+# Настройка CORS - подробная конфигурация
+origins = ["*"]  # В продакшене лучше указать конкретные домены
+if "VERCEL_URL" in os.environ:
+    origins.append(f"https://{os.environ['VERCEL_URL']}")
+    origins.append(f"https://*.{os.environ['VERCEL_URL']}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене заменить на конкретные домены
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    expose_headers=["Content-Disposition", "Content-Type"],
 )
 
 # Модель данных для запроса
@@ -206,17 +212,30 @@ async def generate_pdf(
     page_orientation: Annotated[str, Form()],
     student_name: Annotated[Union[str, None], Form()] = None
 ):
-    # Создаем временный файл для PDF с уникальным именем
-    import uuid
-    unique_id = str(uuid.uuid4())
-    pdf_path = os.path.join(temp_dir, f"propisi_{unique_id}.pdf")
-    
-    # Определяем ориентацию страницы
-    page_size = landscape(A4) if page_orientation == "landscape" else A4
-    
-    # Создаем PDF
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=page_size)
+    try:
+        # Логируем полученные параметры
+        print(f"Получены параметры для генерации PDF:")
+        print(f"- task: {task}")
+        print(f"- fill_type: {fill_type}")
+        print(f"- page_layout: {page_layout}")
+        print(f"- font_type: {font_type}")
+        print(f"- page_orientation: {page_orientation}")
+        print(f"- student_name: {student_name}")
+        print(f"- text length: {len(text)} символов")
+        
+        # Создаем временный файл для PDF с уникальным именем
+        import uuid
+        unique_id = str(uuid.uuid4())
+        pdf_path = os.path.join(temp_dir, f"propisi_{unique_id}.pdf")
+        print(f"Временный путь PDF: {pdf_path}")
+        
+        # Определяем ориентацию страницы
+        page_size = landscape(A4) if page_orientation == "landscape" else A4
+        print(f"Размер страницы: {page_size}")
+        
+        # Создаем PDF
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=page_size)
     
     # Минимальные отступы страницы 
     margin_left = 2
@@ -463,14 +482,30 @@ async def generate_pdf(
     c.save()
     
     # Получаем данные из буфера и сохраняем в файл
-    with open(pdf_path, "wb") as f:
-        f.write(buffer.getvalue())
-    
-    return FileResponse(
-        pdf_path, 
-        media_type="application/pdf", 
-        filename="propisi.pdf"
-    )
+        with open(pdf_path, "wb") as f:
+            f.write(buffer.getvalue())
+        
+        print(f"PDF файл создан: {pdf_path}")
+        
+        # Проверяем размер созданного файла
+        file_size = os.path.getsize(pdf_path)
+        print(f"Размер PDF файла: {file_size} байт")
+        
+        if file_size == 0:
+            raise HTTPException(status_code=500, detail="Создан пустой PDF файл")
+        
+        return FileResponse(
+            pdf_path, 
+            media_type="application/pdf", 
+            filename="propisi.pdf"
+        )
+    except Exception as e:
+        # Логируем ошибку и возвращаем детальную информацию
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Ошибка при генерации PDF: {e}")
+        print(error_details)
+        raise HTTPException(status_code=500, detail=f"Ошибка при генерации PDF: {str(e)}")
 
 @app.post("/api/preview")
 async def generate_preview(
@@ -485,11 +520,23 @@ async def generate_preview(
     """
     Генерирует предварительный просмотр страницы прописи в формате PNG
     """
-    # Создаем временный файл для PDF с уникальным именем
-    import uuid
-    unique_id = str(uuid.uuid4())
-    temp_pdf_path = os.path.join(temp_dir, f"preview_{unique_id}.pdf")
-    temp_png_path = os.path.join(temp_dir, f"preview_{unique_id}.png")
+    try:
+        # Логируем полученные параметры
+        print(f"Получены параметры для предпросмотра:")
+        print(f"- task: {task}")
+        print(f"- fill_type: {fill_type}")
+        print(f"- page_layout: {page_layout}")
+        print(f"- font_type: {font_type}")
+        print(f"- page_orientation: {page_orientation}")
+        print(f"- student_name: {student_name}")
+        print(f"- text length: {len(text)} символов")
+        
+        # Создаем временный файл для PDF с уникальным именем
+        import uuid
+        unique_id = str(uuid.uuid4())
+        temp_pdf_path = os.path.join(temp_dir, f"preview_{unique_id}.pdf")
+        temp_png_path = os.path.join(temp_dir, f"preview_{unique_id}.png")
+        print(f"Временные пути: PDF={temp_pdf_path}, PNG={temp_png_path}")
     
     # Определяем ориентацию страницы
     page_size = landscape(A4) if page_orientation == "landscape" else A4
@@ -781,12 +828,28 @@ async def generate_preview(
     except Exception as e:
         print(f"Ошибка при конвертации PDF в PNG: {e}")
     
-    # В случае ошибки конвертации возвращаем PDF
-    return FileResponse(
-        temp_pdf_path, 
-        media_type="application/pdf", 
-        filename="preview.pdf"
-    )
+        # В случае ошибки конвертации возвращаем PDF
+        print("Конвертация в PNG не удалась, возвращаем PDF напрямую")
+        
+        # Проверяем размер созданного файла
+        file_size = os.path.getsize(temp_pdf_path)
+        print(f"Размер PDF файла для предпросмотра: {file_size} байт")
+        
+        if file_size == 0:
+            raise HTTPException(status_code=500, detail="Создан пустой PDF файл для предпросмотра")
+            
+        return FileResponse(
+            temp_pdf_path, 
+            media_type="application/pdf", 
+            filename="preview.pdf"
+        )
+    except Exception as e:
+        # Логируем ошибку и возвращаем детальную информацию
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Ошибка при генерации предпросмотра: {e}")
+        print(error_details)
+        raise HTTPException(status_code=500, detail=f"Ошибка при генерации предпросмотра: {str(e)}")
 
 @app.get("/api")
 async def root():
