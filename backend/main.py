@@ -435,7 +435,7 @@ async def generate_pdf(
                         c.drawString(x, this_base_y, char)
                     else:  # "black"
                         # Черный цвет для букв
-                        c.setFillColor(black)
+        c.setFillColor(black)
                         c.drawString(x, this_base_y, char)
     
     # Добавляем красную линию по правой стороне как в тетради

@@ -5,8 +5,21 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import OptionCard from './OptionCard';
 import config from '../config';
 
-// Устанавливаем worker для pdf.js
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// Устанавливаем worker для pdf.js - исправленная конфигурация
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+
+// Проверка доступности worker'а
+try {
+  if (typeof window !== 'undefined') {
+    const workerBlob = new Blob(
+      [`importScripts('https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js');`],
+      { type: 'application/javascript' }
+    );
+    pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+  }
+} catch (e) {
+  console.error('Ошибка при инициализации PDF worker:', e);
+}
 
 // Компонент предпросмотра (может отображать как PDF, так и изображения)
 const PreviewViewer = ({ previewUrl, previewType }) => {
@@ -92,13 +105,35 @@ const PreviewViewer = ({ previewUrl, previewType }) => {
       <Document
         file={previewUrl}
         onLoadSuccess={onDocumentLoadSuccess}
-        error="Ошибка загрузки PDF"
-        loading="Загрузка PDF..."
+        error={
+          <div className="pdf-error">
+            <p>Ошибка загрузки PDF.</p>
+            <button onClick={() => window.open(previewUrl, '_blank')}>
+              Открыть PDF в новой вкладке
+            </button>
+          </div>
+        }
+        loading={
+          <div className="pdf-loading">
+            <p>Загрузка PDF...</p>
+            <div className="loading-spinner"></div>
+          </div>
+        }
+        noData={
+          <div className="pdf-no-data">
+            <p>PDF не содержит данных или повреждён.</p>
+          </div>
+        }
       >
         <Page 
           pageNumber={pageNumber} 
           scale={scale} 
           className="pdf-page"
+          error={
+            <div className="pdf-page-error">
+              <p>Ошибка при отображении страницы.</p>
+            </div>
+          }
         />
       </Document>
       <div className="pdf-controls">
@@ -243,9 +278,11 @@ const PropisiForm = () => {
           responseType: 'blob',
           headers: {
             'Accept': 'application/pdf,image/*',
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'multipart/form-data',
+            'Access-Control-Allow-Origin': '*',
+            'X-Requested-With': 'XMLHttpRequest'
           },
-          timeout: 45000,
+          timeout: 60000, // Увеличиваем таймаут до 60 секунд
           withCredentials: false
         });
         
@@ -260,17 +297,28 @@ const PropisiForm = () => {
             setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
             setInfoMessage(null);
             success = true;
+            console.log('Предпросмотр успешно сгенерирован');
             break;
+          } else {
+            console.error(`Некорректный тип контента: ${contentType}`);
           }
+        } else {
+          console.error(`Неудачный ответ: ${response.status}`);
         }
       } catch (err) {
         console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
+        // Полная диагностика ошибки
+        if (err.response) {
+          console.error('Данные ответа:', err.response.data);
+          console.error('Статус:', err.response.status);
+          console.error('Заголовки:', err.response.headers);
+        }
         // Продолжаем со следующим сервером
       }
     }
     
     if (!success) {
-      setError('Не удалось создать предпросмотр. Попробуйте снова или используйте кнопку "Сгенерировать пропись".');
+      setError('Не удалось создать предпросмотр. Проверьте интернет-соединение или попробуйте сгенерировать PDF напрямую.');
     }
     
     setPreviewLoading(false);
@@ -347,6 +395,7 @@ const PropisiForm = () => {
     }
     
     let success = false;
+    let errorMessages = [];
     
     // Пробуем все серверы по очереди
     for (let i = 0; i < config.API_URLS.length; i++) {
@@ -363,9 +412,11 @@ const PropisiForm = () => {
           responseType: 'blob',
           headers: {
             'Accept': 'application/pdf,image/*',
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'multipart/form-data',
+            'Access-Control-Allow-Origin': '*',
+            'X-Requested-With': 'XMLHttpRequest'
           },
-          timeout: 60000,
+          timeout: 90000, // Увеличиваем таймаут до 90 секунд
           withCredentials: false
         });
         
@@ -389,16 +440,27 @@ const PropisiForm = () => {
               setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
             }
             break;
+          } else {
+            errorMessages.push(`Сервер ${apiUrl} вернул некорректный формат: ${contentType}`);
           }
+        } else {
+          errorMessages.push(`Сервер ${apiUrl} вернул статус ${response.status}`);
         }
       } catch (err) {
         console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
+        // Полная диагностика ошибки
+        if (err.response) {
+          console.error('Данные ответа:', err.response.data);
+          console.error('Статус:', err.response.status);
+          console.error('Заголовки:', err.response.headers);
+        }
+        errorMessages.push(`Сервер ${apiUrl}: ${err.message}`);
         // Продолжаем со следующим сервером
       }
     }
     
     if (!success) {
-      setError('Не удалось сгенерировать PDF. Попробуйте упростить задание или повторите позже.');
+      setError(`Не удалось сгенерировать PDF. Проверьте интернет-соединение и попробуйте упростить задание. Детали: ${errorMessages.length > 0 ? errorMessages[0] : 'серверы недоступны'}`);
     }
     
     setLoading(false);
