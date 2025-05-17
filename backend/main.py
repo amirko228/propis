@@ -179,66 +179,36 @@ async def generate_pdf(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     try:
-        # Упрощенная версия генерации PDF
-        # Определяем ориентацию страницы
-        page_size = landscape(A4) if page_orientation == "landscape" else A4
+        # Создаем минимальный PDF без сложной логики
+        # Определяем размер страницы A4
+        page_width, page_height = 595.27, 841.89  # A4 в точках
         
-        # Создаем PDF в памяти
+        # Создаем PDF в памяти напрямую через библиотеку
         buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=page_size)
+        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
-        # Минимальные отступы страницы 
-        margin_left = 20
-        margin_right = 20
-        margin_top = 30
-        margin_bottom = 30
+        # Устанавливаем шрифт - используем только встроенный
+        p.setFont("Helvetica", 12)
         
-        # Разбиваем текст на строки
-        lines = text.strip().split('\n')
-        if not lines:
-            lines = ["Пример текста"]
-        
-        # Используем стандартный шрифт и размер
-        c.setFont("Helvetica", 14)
-        
-        # Простой вывод текста на страницу
-        y = page_size[1] - margin_top
-        line_height = 20
-        
-        # Заголовок
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(margin_left, y, task)
-        y -= line_height * 2
-        
-        # Устанавливаем обычный шрифт
-        c.setFont("Helvetica", 14)
-        
-        # Печать текста построчно
-        for line in lines:
-            if y > margin_bottom:
-                c.drawString(margin_left, y, line)
-                y -= line_height
-        
-        # Рисуем красную линию справа
-        c.setStrokeColor(red)
-        c.setLineWidth(1.0)
-        red_line_x = page_size[0] - margin_right
-        c.line(red_line_x, page_size[1] - margin_top, red_line_x, margin_bottom)
+        # Простой текст
+        p.drawString(72, 800, "Тестовый PDF документ")
+        p.drawString(72, 780, "Прописи")
         
         # Сохраняем PDF
-        c.save()
+        p.save()
         
         # Получаем данные из буфера
         buffer.seek(0)
-        pdf_data = buffer.getvalue()
         
         # Возвращаем PDF напрямую из памяти
         return Response(
-            content=pdf_data, 
+            content=buffer.getvalue(), 
             media_type="application/pdf",
             headers={"Content-Disposition": "attachment; filename=propisi.pdf"}
         )
+        
     except Exception as e:
+        # Логируем ошибку
         import traceback
         error_details = traceback.format_exc()
         print(f"Ошибка при генерации PDF: {e}")
@@ -259,74 +229,36 @@ async def generate_preview(
     Генерирует предварительный просмотр страницы прописи в формате PDF
     """
     try:
-        # Упрощенная версия предварительного просмотра
-        # Определяем ориентацию страницы
-        page_size = landscape(A4) if page_orientation == "landscape" else A4
+        # Создаем минимальный PDF без сложной логики
+        # Определяем размер страницы A4
+        page_width, page_height = 595.27, 841.89  # A4 в точках
         
-        # Создаем PDF в памяти
+        # Создаем PDF в памяти напрямую через библиотеку
         buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=page_size)
+        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
-        # Минимальные отступы страницы 
-        margin_left = 20
-        margin_right = 20
-        margin_top = 30
-        margin_bottom = 30
+        # Устанавливаем шрифт - используем только встроенный
+        p.setFont("Helvetica", 12)
         
-        # Разбиваем текст на строки и ограничиваем первыми тремя
-        lines = text.strip().split('\n')
-        if not lines:
-            lines = ["Пример текста для предпросмотра"]
-        
-        # Берем только первые 3 строки для предпросмотра
-        lines = lines[:min(3, len(lines))]
-        
-        # Используем стандартный шрифт и размер
-        c.setFont("Helvetica", 14)
-        
-        # Простой вывод текста на страницу
-        y = page_size[1] - margin_top
-        line_height = 20
-        
-        # Заголовок
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(margin_left, y, f"Предпросмотр: {task}")
-        y -= line_height * 2
-        
-        # Устанавливаем обычный шрифт
-        c.setFont("Helvetica", 14)
-        
-        # Печать текста построчно
-        for line in lines:
-            if y > margin_bottom:
-                c.drawString(margin_left, y, line)
-                y -= line_height
-        
-        # Текст "Это предпросмотр"
-        y = margin_bottom + 20
-        c.setFont("Helvetica-Italic", 10)
-        c.drawString(margin_left, y, "Это предварительный просмотр. Полный документ может отличаться.")
-        
-        # Рисуем красную линию справа
-        c.setStrokeColor(red)
-        c.setLineWidth(1.0)
-        red_line_x = page_size[0] - margin_right
-        c.line(red_line_x, page_size[1] - margin_top, red_line_x, margin_bottom)
+        # Простой текст
+        p.drawString(72, 800, "Предпросмотр PDF документа")
+        p.drawString(72, 780, "Прописи")
         
         # Сохраняем PDF
-        c.save()
+        p.save()
         
         # Получаем данные из буфера
         buffer.seek(0)
-        pdf_data = buffer.getvalue()
         
         # Возвращаем PDF напрямую из памяти
         return Response(
-            content=pdf_data,
+            content=buffer.getvalue(),
             media_type="application/pdf", 
             headers={"Content-Disposition": "inline; filename=preview.pdf"}
         )
+        
     except Exception as e:
+        # Логируем ошибку
         import traceback
         error_details = traceback.format_exc()
         print(f"Ошибка при генерации предпросмотра: {e}")
