@@ -187,92 +187,14 @@ const PropisiForm = () => {
   
   // Проверка доступности API при загрузке компонента
   useEffect(() => {
-    const checkApi = async () => {
-      setInfoMessage('Проверяем доступность серверов...');
-      
-      // Принудительно устанавливаем первый сервер из списка и считаем его рабочим
-      const firstApi = config.API_URLS[0];
-      setCurrentApiUrl(firstApi);
-      setCurrentApiIndex(0);
-      console.log(`Начинаем с API: ${firstApi}`);
-      setInfoMessage(null);
-      
-      // Запускаем асинхронную проверку серверов, но не блокируем интерфейс
-      setTimeout(() => {
-        testAllServers();
-      }, 100);
-    };
-    
-    checkApi();
+    // Всегда начинаем с первого сервера без проверок
+    const firstApi = config.API_URLS[0];
+    setCurrentApiUrl(firstApi);
+    setCurrentApiIndex(0);
+    console.log(`Используем сервер по умолчанию: ${firstApi}`);
+    setInfoMessage(null);
   }, []);
   
-  // Функция асинхронной проверки всех серверов
-  const testAllServers = async () => {
-    console.log("Начинаем асинхронную проверку всех серверов...");
-    
-    // Проверяем все серверы параллельно и устанавливаем первый ответивший
-    const promises = config.API_URLS.map((url, index) => {
-      return testServerWithImage(url, index);
-    });
-    
-    // Запускаем все проверки параллельно
-    Promise.all(promises).then(() => {
-      console.log("Все проверки серверов завершены");
-    }).catch(err => {
-      console.error("Ошибка при проверке серверов:", err);
-    });
-  };
-  
-  // Проверка сервера с помощью загрузки изображения
-  // Этот метод обходит ограничения CORS
-  const testServerWithImage = (apiUrl, index) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      
-      // Устанавливаем таймаут на 5 секунд
-      const timeout = setTimeout(() => {
-        console.log(`Таймаут при проверке ${apiUrl}`);
-        resolve(false);
-      }, 5000);
-      
-      // При успешной загрузке изображения
-      img.onload = () => {
-        clearTimeout(timeout);
-        console.log(`Сервер ${apiUrl} доступен (проверка через изображение)`);
-        
-        // Устанавливаем этот сервер как текущий
-        setCurrentApiUrl(apiUrl);
-        setCurrentApiIndex(index);
-        
-        resolve(true);
-      };
-      
-      // При ошибке загрузки
-      img.onerror = () => {
-        clearTimeout(timeout);
-        console.log(`Сервер ${apiUrl} недоступен (проверка через изображение)`);
-        resolve(false);
-      };
-      
-      // Запускаем проверку, загружая favicon или другое маленькое изображение с сервера
-      // Добавляем случайный параметр для обхода кеширования
-      const random = Math.random().toString(36).substring(7);
-      img.src = `${apiUrl}/favicon.ico?${random}`;
-    });
-  };
-  
-  // Функция проверки доступности API (упрощенная)
-  const checkApiAvailability = async (apiUrl = currentApiUrl, timeout = 3000) => {
-    try {
-      // Всегда возвращаем true, чтобы не блокировать работу приложения
-      // Для реальной проверки используем testAllServers
-      return true;
-    } catch (err) {
-      console.error(`API ${apiUrl} недоступен: ${err.message}`);
-      return true; // Все равно возвращаем true
-    }
-  };
-
   // Обработчик изменения полей формы
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -304,87 +226,51 @@ const PropisiForm = () => {
       formPayload.append(key, formData[key]);
     }
     
-    let apiUrl = currentApiUrl;
     let success = false;
-    let attempts = 0;
     
-    // Пробуем все доступные API
-    while (!success && attempts < config.API_URLS.length) {
+    // Пробуем все серверы по очереди
+    for (let i = 0; i < config.API_URLS.length; i++) {
+      const apiUrl = config.API_URLS[i];
+      setCurrentApiUrl(apiUrl);
+      setCurrentApiIndex(i);
+      
       try {
-        // URL API для предпросмотра
+        console.log(`Пробуем сервер для превью: ${apiUrl}`);
         const requestUrl = `${apiUrl}/preview`;
-        console.log('Отправляем запрос превью на:', requestUrl);
         
-        // Отправляем запрос на генерацию предпросмотра
+        // Отправляем запрос с увеличенным таймаутом
         const response = await axios.post(requestUrl, formPayload, {
-          responseType: 'blob', // Получаем данные как бинарный файл
+          responseType: 'blob',
           headers: {
             'Accept': 'application/pdf,image/*',
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 40000, // Увеличиваем таймаут до 40 секунд
+          timeout: 45000,
           withCredentials: false
         });
         
-        // Проверяем статус ответа
-        if (response.status !== 200) {
-          throw new Error(`Ошибка сервера: ${response.status}`);
-        }
-        
-        // Определяем тип ответа
-        const contentType = response.headers['content-type'];
-        console.log('Получен предпросмотр с типом:', contentType);
-        
-        if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-          // Создаем URL объект для отображения
-          const blob = new Blob([response.data], { type: contentType });
-          const url = URL.createObjectURL(blob);
+        if (response.status === 200) {
+          const contentType = response.headers['content-type'];
           
-          // Сохраняем URL для предпросмотра
-          setPreviewUrl(url);
-          setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
-          success = true;
-          setInfoMessage(null);
-        } else {
-          // Если содержимое не PDF или изображение, попробуем интерпретировать его как текст ошибки
-          const reader = new FileReader();
-          reader.onload = () => {
-            try {
-              const result = reader.result;
-              const errorMessage = result.includes('{') 
-                ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
-                : result;
-              setError(`Ошибка превью: ${errorMessage}`);
-            } catch (e) {
-              setError('Произошла неизвестная ошибка при обработке ответа сервера');
-            }
-          };
-          reader.readAsText(response.data);
-          
-          // Пробуем следующий API
-          apiUrl = switchToNextApi();
-          attempts++;
-        }
-      } catch (err) {
-        console.error('Ошибка при загрузке предпросмотра:', err);
-        
-        // Переключаемся на следующий API
-        apiUrl = switchToNextApi();
-        attempts++;
-        
-        // Если перепробовали все API, показываем ошибку
-        if (attempts >= config.API_URLS.length) {
-          if (err.code === 'ECONNABORTED') {
-            setError('Превышено время ожидания ответа. Серверы перегружены. Попробуйте упростить текст или повторить позже.');
-          } else if (err.response) {
-            setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
-          } else if (err.request) {
-            setError('Серверы не отвечают. Проверьте подключение к интернету и обновите страницу.');
-          } else {
-            setError(`Ошибка: ${err.message || 'неизвестная ошибка'}. Попробуйте еще раз.`);
+          if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
+            const blob = new Blob([response.data], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            
+            setPreviewUrl(url);
+            setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
+            setInfoMessage(null);
+            success = true;
+            break;
           }
         }
+      } catch (err) {
+        console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
+        // Продолжаем со следующим сервером
       }
+    }
+    
+    if (!success) {
+      setError('Не удалось создать предпросмотр. Попробуйте снова или используйте кнопку "Сгенерировать пропись".');
     }
     
     setPreviewLoading(false);
@@ -440,55 +326,9 @@ const PropisiForm = () => {
 
   // Функция для ручной проверки серверов
   const retryServerConnection = async () => {
-    setInfoMessage('Проверяем доступность серверов...');
-    setError(null);
-    
-    try {
-      // Принудительно проверяем все серверы подряд
-      for (let i = 0; i < config.API_URLS.length; i++) {
-        const apiUrl = config.API_URLS[i];
-        setInfoMessage(`Проверка сервера ${i+1} из ${config.API_URLS.length}: ${apiUrl}`);
-        
-        try {
-          // Прямой запрос без сложной логики
-          const response = await fetch(`${apiUrl}/health`, { 
-            method: 'GET',
-            mode: 'cors',
-            cache: 'no-cache',
-            credentials: 'omit',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-            timeout: 5000
-          });
-          
-          if (response.ok) {
-            setCurrentApiUrl(apiUrl);
-            setCurrentApiIndex(i);
-            setInfoMessage(`Сервер ${apiUrl} доступен и будет использован для запросов`);
-            setTimeout(() => setInfoMessage(null), 3000);
-            return;
-          } else {
-            console.log(`Сервер ${apiUrl} ответил с ошибкой ${response.status}`);
-          }
-        } catch (err) {
-          console.error(`Ошибка при проверке ${apiUrl}:`, err.message);
-        }
-      }
-      
-      // Если дошли сюда, значит ни один сервер не ответил успешно
-      setInfoMessage('Ни один сервер не ответил успешно, но приложение продолжит работать');
-      
-      // Устанавливаем первый сервер по умолчанию
-      setCurrentApiUrl(config.API_URLS[0]);
-      setCurrentApiIndex(0);
-      
-      setTimeout(() => setInfoMessage(null), 3000);
-    } catch (err) {
-      console.error('Ошибка при проверке серверов:', err);
-      setError('Произошла ошибка при проверке серверов');
-    }
+    setInfoMessage('Переключаемся на следующий сервер...');
+    switchToNextApi();
+    setTimeout(() => setInfoMessage(null), 2000);
   };
 
   // Обработчик отправки формы
@@ -506,101 +346,59 @@ const PropisiForm = () => {
       formPayload.append(key, formData[key]);
     }
     
-    let apiUrl = currentApiUrl;
     let success = false;
-    let attempts = 0;
     
-    // Пробуем все доступные API
-    while (!success && attempts < config.API_URLS.length) {
+    // Пробуем все серверы по очереди
+    for (let i = 0; i < config.API_URLS.length; i++) {
+      const apiUrl = config.API_URLS[i];
+      setCurrentApiUrl(apiUrl);
+      setCurrentApiIndex(i);
+      
       try {
-        // URL API для генерации PDF
+        console.log(`Пробуем сервер для генерации PDF: ${apiUrl}`);
         const requestUrl = `${apiUrl}/generate-pdf`;
-        console.log('Отправляем запрос на:', requestUrl);
         
-        // Отправляем запрос на генерацию PDF
+        // Отправляем запрос с увеличенным таймаутом
         const response = await axios.post(requestUrl, formPayload, {
-          responseType: 'blob', // Получаем PDF как бинарный файл
+          responseType: 'blob',
           headers: {
-            'Accept': 'application/pdf',
+            'Accept': 'application/pdf,image/*',
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 60000, // Таймаут 60 секунд
+          timeout: 60000,
           withCredentials: false
         });
         
-        // Проверяем статус ответа
-        if (response.status !== 200) {
-          throw new Error(`Ошибка сервера: ${response.status}`);
-        }
-        
-        // Проверяем тип контента
-        const contentType = response.headers['content-type'];
-        console.log('Получен ответ с типом:', contentType);
-        console.log('Размер данных:', response.data.size, 'байт');
-        
-        // Проверяем, что получили PDF или изображение
-        if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-          // Создаем URL для скачивания PDF
-          const pdfBlob = new Blob([response.data], { type: contentType });
-          const url = URL.createObjectURL(pdfBlob);
+        if (response.status === 200) {
+          const contentType = response.headers['content-type'];
           
-          // Сохраняем URL для предпросмотра и будущего скачивания
-          setPreviewUrl(url);
-          setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
-          setLastPdfUrl(url);
-          
-          // Запускаем скачивание
-          const downloadSuccess = downloadFile(url);
-          
-          success = true;
-          if (downloadSuccess) {
-            setInfoMessage('PDF успешно сгенерирован. Если скачивание не началось автоматически, нажмите "Скачать снова".');
-          } else {
-            setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
-          }
-        } else {
-          // Если содержимое не PDF, попробуем интерпретировать его как текст ошибки
-          const reader = new FileReader();
-          reader.onload = () => {
-            try {
-              const result = reader.result;
-              console.log('Текст ответа:', result);
-              const errorMessage = result.includes('{') 
-                ? JSON.parse(result).detail || 'Неизвестная ошибка сервера' 
-                : result;
-              setError(`Ошибка: ${errorMessage}`);
-              console.error('Ошибка в ответе сервера:', errorMessage);
-            } catch (e) {
-              setError('Произошла неизвестная ошибка при обработке ответа сервера');
-              console.error('Ошибка при обработке ответа:', e);
+          if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
+            const blob = new Blob([response.data], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            
+            setPreviewUrl(url);
+            setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
+            setLastPdfUrl(url);
+            
+            const downloadSuccess = downloadFile(url);
+            
+            success = true;
+            if (downloadSuccess) {
+              setInfoMessage('PDF успешно сгенерирован. Если скачивание не началось автоматически, нажмите "Скачать снова".');
+            } else {
+              setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
             }
-          };
-          reader.readAsText(response.data);
-          
-          // Пробуем следующий API
-          apiUrl = switchToNextApi();
-          attempts++;
+            break;
+          }
         }
       } catch (err) {
-        console.error('Ошибка при генерации PDF:', err);
-        
-        // Переключаемся на следующий API
-        apiUrl = switchToNextApi();
-        attempts++;
-        
-        // Если перепробовали все API, показываем ошибку
-        if (attempts >= config.API_URLS.length) {
-          if (err.code === 'ECONNABORTED') {
-            setError('Превышено время ожидания ответа. Серверы перегружены. Попробуйте упростить текст или повторить позже.');
-          } else if (err.response) {
-            setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
-          } else if (err.request) {
-            setError('Проблема подключения к серверам. Проверьте интернет и обновите страницу.');
-          } else {
-            setError(`Ошибка: ${err.message || 'неизвестная ошибка'}. Попробуйте позже.`);
-          }
-        }
+        console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
+        // Продолжаем со следующим сервером
       }
+    }
+    
+    if (!success) {
+      setError('Не удалось сгенерировать PDF. Попробуйте упростить задание или повторите позже.');
     }
     
     setLoading(false);

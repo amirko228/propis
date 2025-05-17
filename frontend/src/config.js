@@ -5,6 +5,8 @@ const config = {
     'https://propisi-api.adaptable.app',
     'https://propisi-backend.onrender.com',
     'https://propisi-api-2.onrender.com',
+    'https://cors-anywhere.herokuapp.com/https://propisi-api.adaptable.app',
+    'https://api.allorigins.win/raw?url=https://propisi-api.adaptable.app',
     'http://localhost:8000'
   ],
   
