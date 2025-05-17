@@ -195,9 +195,15 @@ const PropisiForm = () => {
     }
     
     try {
-      // URL API для предпросмотра - используем явно указанный URL без API_URL
-      // Так как у нас все на одном домене
-      const apiUrl = `/api/preview`;
+      // Определяем базовый URL для API в зависимости от среды
+      // В продакшн используем абсолютный URL, в разработке относительный
+      const isProduction = window.location.hostname !== 'localhost';
+      const baseUrl = isProduction 
+        ? 'https://propis-backend.vercel.app' // Замените на ваш актуальный домен бэкенда
+        : '';
+      
+      // URL API для предпросмотра
+      const apiUrl = `${baseUrl}/api/preview`;
       console.log('Отправка запроса на предпросмотр:', apiUrl);
       
       console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
@@ -267,9 +273,15 @@ const PropisiForm = () => {
     }
 
     try {
-      // URL API бэкенда - используем явно указанный URL без API_URL
-      // Так как у нас все на одном домене
-      const apiUrl = `/api/generate-pdf`;
+      // Определяем базовый URL для API в зависимости от среды
+      // В продакшн используем абсолютный URL, в разработке относительный
+      const isProduction = window.location.hostname !== 'localhost';
+      const baseUrl = isProduction 
+        ? 'https://propis-backend.vercel.app' // Замените на ваш актуальный домен бэкенда
+        : '';
+      
+      // URL API бэкенда
+      const apiUrl = `${baseUrl}/api/generate-pdf`;
       console.log('Отправка запроса на генерацию PDF:', apiUrl);
       
       console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
