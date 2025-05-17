@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-// Библиотека успешно установлена
-import { Document, Page, pdfjs } from 'react-pdf';
+// Удаляем неиспользуемые импорты
 import OptionCard from './OptionCard';
-
-// Устанавливаем worker для pdf.js
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 // Компонент предпросмотра (теперь будет просто отображать текстовое сообщение)
 const PreviewViewer = ({ message }) => {
