@@ -20,6 +20,7 @@ from reportlab.graphics import renderPDF
 from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
+import datetime
 
 app = FastAPI(title="Генератор прописей")
 
@@ -179,98 +180,40 @@ async def generate_pdf(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Обходное решение - возвращаем HTML вместо PDF для Vercel.
+    Крайне упрощенная версия API для диагностики
     """
     try:
-        # Создаем простой HTML-шаблон для отображения текста
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Генератор прописей - {task}</title>
-            <meta charset="utf-8">
-            <style>
-                body {{ 
-                    font-family: Arial, sans-serif; 
-                    margin: 30px; 
-                    line-height: 1.6;
-                }}
-                .container {{ 
-                    border: 1px solid #ddd; 
-                    padding: 20px; 
-                    margin-bottom: 20px; 
-                    background-color: #f9f9f9;
-                }}
-                .title {{ 
-                    font-size: 24px; 
-                    margin-bottom: 20px; 
-                    color: #333;
-                }}
-                .text {{ 
-                    white-space: pre-line; 
-                    font-size: 16px; 
-                    margin-bottom: 30px;
-                }}
-                .info {{ 
-                    font-size: 12px; 
-                    color: #777; 
-                    margin-top: 30px;
-                }}
-                .red-line {{
-                    border-right: 2px solid red;
-                    padding-right: 20px;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container red-line">
-                <h1 class="title">{task}</h1>
-                <div class="text">{text}</div>
-                <div class="info">
-                    <p>Тип заполнения: {fill_type}</p>
-                    <p>Тип разметки: {page_layout}</p>
-                    <p>Тип шрифта: {font_type}</p>
-                    <p>Ориентация: {page_orientation}</p>
-                    {f"<p>Имя ученика: {student_name}</p>" if student_name else ""}
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        # Создаем объект с данными, которые мы получили
+        response_data = {
+            "message": "Запрос успешно обработан",
+            "task": task,
+            "fill_type": fill_type,
+            "text_sample": text[:50] + "..." if len(text) > 50 else text,
+            "page_layout": page_layout,
+            "font_type": font_type,
+            "page_orientation": page_orientation,
+            "student_name": student_name,
+            "timestamp": str(datetime.datetime.now())
+        }
         
-        # Возвращаем HTML-страницу
-        return Response(content=html_content, media_type="text/html")
-    
+        # Возвращаем простой JSON без попыток создания PDF
+        return JSONResponse(content=response_data)
     except Exception as e:
-        # Максимально подробно логируем ошибку
+        # Подробное логирование ошибки
         import traceback
         error_trace = traceback.format_exc()
         print(f"ОШИБКА В GENERATE_PDF: {str(e)}")
         print(error_trace)
         
-        # Возвращаем ошибку в формате HTML
-        error_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Ошибка генерации</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 30px; }}
-                .error {{ color: red; font-weight: bold; }}
-                .details {{ margin-top: 20px; padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; }}
-            </style>
-        </head>
-        <body>
-            <h1 class="error">Произошла ошибка при генерации страницы</h1>
-            <p>Пожалуйста, попробуйте снова или обратитесь к администратору</p>
-            <div class="details">
-                <h3>Детали ошибки (для разработчика):</h3>
-                <p>{str(e)}</p>
-            </div>
-        </body>
-        </html>
-        """
-        return Response(content=error_html, media_type="text/html", status_code=500)
+        # Возвращаем ошибку в формате JSON
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "message": "Произошла ошибка при обработке запроса"
+            }
+        )
 
 @app.post("/api/preview")
 async def generate_preview(
@@ -283,112 +226,40 @@ async def generate_preview(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Обходное решение - возвращаем HTML вместо PDF для предпросмотра на Vercel.
+    Крайне упрощенная версия API для предпросмотра для диагностики
     """
     try:
-        # Ограничиваем текст только первыми тремя строками
-        preview_lines = text.split('\n')[:3]
-        preview_text = '\n'.join(preview_lines)
+        # Создаем объект с данными, которые мы получили
+        response_data = {
+            "message": "Запрос предпросмотра успешно обработан",
+            "task": task,
+            "fill_type": fill_type,
+            "text_sample": text[:30] + "..." if len(text) > 30 else text,
+            "page_layout": page_layout,
+            "font_type": font_type,
+            "page_orientation": page_orientation,
+            "student_name": student_name,
+            "timestamp": str(datetime.datetime.now())
+        }
         
-        # Создаем простой HTML-шаблон для предпросмотра
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Предпросмотр - {task}</title>
-            <meta charset="utf-8">
-            <style>
-                body {{ 
-                    font-family: Arial, sans-serif; 
-                    margin: 30px; 
-                    line-height: 1.6;
-                }}
-                .container {{ 
-                    border: 1px solid #ddd; 
-                    padding: 20px; 
-                    margin-bottom: 20px; 
-                    background-color: #f9f9f9;
-                }}
-                .title {{ 
-                    font-size: 24px; 
-                    margin-bottom: 20px; 
-                    color: #333;
-                }}
-                .text {{ 
-                    white-space: pre-line; 
-                    font-size: 16px; 
-                    margin-bottom: 30px;
-                }}
-                .info {{ 
-                    font-size: 12px; 
-                    color: #777; 
-                    margin-top: 30px;
-                }}
-                .preview-notice {{
-                    background-color: #fff3cd;
-                    padding: 10px;
-                    border: 1px solid #ffeeba;
-                    color: #856404;
-                    margin-top: 20px;
-                }}
-                .red-line {{
-                    border-right: 2px solid red;
-                    padding-right: 20px;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container red-line">
-                <h1 class="title">Предпросмотр: {task}</h1>
-                <div class="text">{preview_text}</div>
-                <div class="preview-notice">
-                    Это только предварительный просмотр. Полный документ может отличаться.
-                </div>
-                <div class="info">
-                    <p>Тип заполнения: {fill_type}</p>
-                    <p>Тип разметки: {page_layout}</p>
-                    <p>Тип шрифта: {font_type}</p>
-                    <p>Ориентация: {page_orientation}</p>
-                    {f"<p>Имя ученика: {student_name}</p>" if student_name else ""}
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Возвращаем HTML-страницу вместо PDF
-        return Response(content=html_content, media_type="text/html")
-    
+        # Возвращаем простой JSON без попыток создания PDF
+        return JSONResponse(content=response_data)
     except Exception as e:
-        # Максимально подробно логируем ошибку
+        # Подробное логирование ошибки
         import traceback
         error_trace = traceback.format_exc()
         print(f"ОШИБКА В PREVIEW: {str(e)}")
         print(error_trace)
         
-        # Возвращаем ошибку в формате HTML
-        error_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Ошибка предпросмотра</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 30px; }}
-                .error {{ color: red; font-weight: bold; }}
-                .details {{ margin-top: 20px; padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; }}
-            </style>
-        </head>
-        <body>
-            <h1 class="error">Произошла ошибка при создании предпросмотра</h1>
-            <p>Пожалуйста, попробуйте снова или обратитесь к администратору</p>
-            <div class="details">
-                <h3>Детали ошибки (для разработчика):</h3>
-                <p>{str(e)}</p>
-            </div>
-        </body>
-        </html>
-        """
-        return Response(content=error_html, media_type="text/html", status_code=500)
+        # Возвращаем ошибку в формате JSON
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "message": "Произошла ошибка при обработке запроса предпросмотра"
+            }
+        )
 
 @app.get("/api")
 async def root():
