@@ -3,7 +3,6 @@ import axios from 'axios';
 // Библиотека успешно установлена
 import { Document, Page, pdfjs } from 'react-pdf';
 import OptionCard from './OptionCard';
-import config from '../config';
 
 // Устанавливаем worker для pdf.js
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
