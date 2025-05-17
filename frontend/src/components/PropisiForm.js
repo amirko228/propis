@@ -271,102 +271,6 @@ const PropisiForm = () => {
     });
   };
 
-  // Функция для загрузки предпросмотра
-  const loadPreview = async () => {
-    if (previewLoading) return;
-    
-    setPreviewLoading(true);
-    setError(null);
-    setInfoMessage('Генерация предпросмотра, пожалуйста подождите...');
-    
-    // Создаем FormData для отправки на сервер
-    const formPayload = new FormData();
-    for (const key in formData) {
-      formPayload.append(key, formData[key]);
-    }
-    
-    let success = false;
-    
-    // Создаем axios-клиент с CORS-прокси
-    const axiosClient = axios.create({
-      responseType: 'blob',
-      headers: {
-        'Accept': 'application/pdf,image/*',
-        'Content-Type': 'multipart/form-data',
-        'Access-Control-Allow-Origin': '*',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      timeout: 60000,
-      withCredentials: false
-    });
-
-    // Отключаем трансформацию данных для CORS-прокси
-    axiosClient.defaults.transformRequest = [
-      (data, headers) => {
-        return data;
-      }
-    ];
-    
-    // Пробуем все серверы по очереди
-    for (let i = 0; i < config.API_URLS.length; i++) {
-      const apiUrl = config.API_URLS[i];
-      setCurrentApiUrl(apiUrl);
-      setCurrentApiIndex(i);
-      
-      try {
-        console.log(`Пробуем сервер для превью: ${apiUrl}`);
-        const requestUrl = `${apiUrl}/preview`;
-        
-        // Добавляем случайное число для обхода кэша
-        const randomParam = `?_=${Date.now()}`;
-        
-        // Отправляем запрос с увеличенным таймаутом
-        const response = await axiosClient.post(requestUrl + randomParam, formPayload);
-        
-        if (response.status === 200) {
-          const contentType = response.headers['content-type'];
-          
-          if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-            const blob = new Blob([response.data], { type: contentType });
-            const url = URL.createObjectURL(blob);
-            
-            setPreviewUrl(url);
-            setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
-            setInfoMessage(null);
-            success = true;
-            console.log('Предпросмотр успешно сгенерирован');
-            break;
-          } else {
-            console.error(`Некорректный тип контента: ${contentType}`);
-          }
-        } else {
-          console.error(`Неудачный ответ: ${response.status}`);
-        }
-      } catch (err) {
-        console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
-        // Полная диагностика ошибки
-        if (err.response) {
-          console.error('Данные ответа:', err.response.data);
-          console.error('Статус:', err.response.status);
-          console.error('Заголовки:', err.response.headers);
-        }
-        
-        // Если это последний сервер, повторяем снова с первым
-        if (i === config.API_URLS.length - 1 && !success) {
-          i = -1; // Начнем снова с индекса 0
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Ждем 2 секунды перед повторной попыткой
-          setInfoMessage('Повторяем попытку с другим сервером...');
-        }
-      }
-    }
-    
-    if (!success) {
-      setError('Не удалось создать предпросмотр. Проверьте интернет-соединение или попробуйте сгенерировать PDF напрямую.');
-    }
-    
-    setPreviewLoading(false);
-  };
-
   // Функция для скачивания файла
   const downloadFile = (url, filename = 'propisi.pdf') => {
     try {
@@ -416,7 +320,7 @@ const PropisiForm = () => {
   };
 
   // Функция для ручной проверки серверов
-  const retryServerConnection = async () => {
+  const retryServerConnection = () => {
     setInfoMessage('Переключаемся на следующий сервер...');
     switchToNextApi();
     setTimeout(() => setInfoMessage(null), 2000);
@@ -442,10 +346,11 @@ const PropisiForm = () => {
       });
       
       // Добавляем базовую информацию
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(16);
-      pdf.text('Пропись (аварийный режим)', 20, 20);
+      pdf.text('ПРОПИСЬ', 105, 20, { align: 'center' });
       
+      pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(12);
       pdf.text(`Задание: ${formData.task}`, 20, 30);
       
@@ -453,24 +358,107 @@ const PropisiForm = () => {
         pdf.text(`Ученик: ${formData.student_name}`, 20, 40);
       }
       
+      // Определяем параметры в зависимости от типа разметки
+      let lineHeight = 10;
+      let startY = 50;
+      let xMargin = 20;
+      
+      // Добавляем фоновую разметку
+      if (formData.page_layout === 'lines') {
+        // Рисуем линии
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          pdf.line(xMargin, y, 190, y);
+          y += lineHeight;
+        }
+      } else if (formData.page_layout === 'cells') {
+        // Рисуем клетки
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          for (let x = xMargin; x < 190; x += 10) {
+            pdf.line(x, startY, x, 270);  // Вертикальные линии
+          }
+          pdf.line(xMargin, y, 190, y);  // Горизонтальные линии
+          y += 10;
+        }
+      } else if (formData.page_layout === 'lines_oblique') {
+        // Рисуем косые линейки
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          pdf.line(xMargin, y, 190, y); // Обычная линия
+          
+          // Добавляем наклонные линии
+          if (y + lineHeight < 270) {
+            pdf.setDrawColor(220, 220, 220);
+            for (let x = xMargin; x < 190; x += 15) {
+              pdf.line(x, y, x + 10, y + lineHeight);
+            }
+          }
+          
+          y += lineHeight;
+        }
+      }
+      
+      // Тип шрифта для текста
+      let textColor = [0, 0, 0]; // Черный по умолчанию
+      if (formData.font_type === 'gray') {
+        textColor = [150, 150, 150]; // Серый
+      } else if (formData.font_type === 'punktir') {
+        // Для пунктира используем черный, но специальную функцию рисования
+        textColor = [0, 0, 0];
+      }
+      
       // Добавляем текст прописи
-      pdf.setFontSize(14);
+      pdf.setFontSize(16);
+      pdf.setTextColor(textColor[0], textColor[1], textColor[2]);
       
       const lines = formData.text.split('\n');
-      let yPos = 60;
+      let yPos = startY + 8; // Отступ для текста
       
-      lines.forEach(line => {
-        if (line.trim()) {
-          pdf.text(line, 20, yPos);
-          yPos += 15;
-        } else {
-          yPos += 10; // Пустая строка
+      // Обработка разных типов заполнения
+      if (formData.fill_type === 'one_line' && lines.length > 0) {
+        // Размножаем первую строку на весь документ
+        const firstLine = lines[0];
+        while (yPos < 260) {
+          pdf.text(firstLine, xMargin + 5, yPos);
+          yPos += lineHeight;
         }
-      });
+      } else if (formData.fill_type === 'first_letter') {
+        // Размножаем первую букву каждой строки
+        lines.forEach(line => {
+          if (line.trim()) {
+            const firstLetter = line.trim()[0];
+            let repeatedLetters = '';
+            for (let i = 0; i < 20; i++) {
+              repeatedLetters += firstLetter + ' ';
+            }
+            pdf.text(repeatedLetters, xMargin + 5, yPos);
+            yPos += lineHeight;
+          } else {
+            yPos += lineHeight; // Пустая строка
+          }
+        });
+      } else {
+        // Обычное заполнение - используем текст как есть
+        lines.forEach(line => {
+          if (line.trim()) {
+            pdf.text(line, xMargin + 5, yPos);
+            yPos += lineHeight;
+          } else {
+            yPos += lineHeight; // Пустая строка
+          }
+        });
+      }
       
-      // Добавляем примечание
+      // Добавляем дату и время
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ru-RU');
       pdf.setFontSize(10);
-      pdf.text('* Создано в резервном режиме из-за проблем с сервером', 20, 280);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Сгенерировано: ${dateStr}`, 20, 280);
       
       // Сохраняем PDF
       const pdfUrl = pdf.output('datauristring');
@@ -481,10 +469,10 @@ const PropisiForm = () => {
       setLastPdfUrl(pdfUrl);
       
       // Автоматическое скачивание
-      const downloadSuccess = downloadFile(pdfUrl, 'propisi-fallback.pdf');
+      const downloadSuccess = downloadFile(pdfUrl, 'propisi.pdf');
       
       if (downloadSuccess) {
-        setInfoMessage('PDF успешно сгенерирован в браузере. Если скачивание не началось автоматически, нажмите "Скачать снова".');
+        setInfoMessage('PDF успешно сгенерирован в браузере.');
       } else {
         setInfoMessage('PDF успешно сгенерирован в браузере, но возникла проблема при скачивании. Нажмите "Скачать снова".');
       }
@@ -496,127 +484,163 @@ const PropisiForm = () => {
     setLoading(false);
   };
 
+  // Загрузка предпросмотра локально
+  const loadPreview = async () => {
+    if (previewLoading) return;
+    
+    setPreviewLoading(true);
+    setError(null);
+    setInfoMessage('Генерация предпросмотра, пожалуйста подождите...');
+    
+    try {
+      // Динамический импорт библиотеки jsPDF только когда она нужна
+      const jsPDFModule = await import('jspdf');
+      const { jsPDF } = jsPDFModule.default;
+      
+      // Создаем новый PDF документ
+      const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({
+        orientation: orientation,
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Добавляем базовую информацию
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text('ПРОПИСЬ (предпросмотр)', 105, 20, { align: 'center' });
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(12);
+      pdf.text(`Задание: ${formData.task}`, 20, 30);
+      
+      if (formData.student_name) {
+        pdf.text(`Ученик: ${formData.student_name}`, 20, 40);
+      }
+      
+      // Определяем параметры в зависимости от типа разметки
+      let lineHeight = 10;
+      let startY = 50;
+      let xMargin = 20;
+      
+      // Добавляем фоновую разметку
+      if (formData.page_layout === 'lines') {
+        // Рисуем линии
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          pdf.line(xMargin, y, 190, y);
+          y += lineHeight;
+        }
+      } else if (formData.page_layout === 'cells') {
+        // Рисуем клетки
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          for (let x = xMargin; x < 190; x += 10) {
+            pdf.line(x, startY, x, 270);  // Вертикальные линии
+          }
+          pdf.line(xMargin, y, 190, y);  // Горизонтальные линии
+          y += 10;
+        }
+      } else if (formData.page_layout === 'lines_oblique') {
+        // Рисуем косые линейки
+        let y = startY;
+        while (y < 270) {
+          pdf.setDrawColor(200, 200, 200);
+          pdf.line(xMargin, y, 190, y); // Обычная линия
+          
+          // Добавляем наклонные линии
+          if (y + lineHeight < 270) {
+            pdf.setDrawColor(220, 220, 220);
+            for (let x = xMargin; x < 190; x += 15) {
+              pdf.line(x, y, x + 10, y + lineHeight);
+            }
+          }
+          
+          y += lineHeight;
+        }
+      }
+      
+      // Тип шрифта для текста
+      let textColor = [0, 0, 0]; // Черный по умолчанию
+      if (formData.font_type === 'gray') {
+        textColor = [150, 150, 150]; // Серый
+      } else if (formData.font_type === 'punktir') {
+        // Для пунктира используем черный, но специальную функцию рисования
+        textColor = [0, 0, 0];
+      }
+      
+      // Добавляем текст прописи
+      pdf.setFontSize(16);
+      pdf.setTextColor(textColor[0], textColor[1], textColor[2]);
+      
+      const lines = formData.text.split('\n');
+      let yPos = startY + 8; // Отступ для текста
+      
+      // Обработка разных типов заполнения
+      if (formData.fill_type === 'one_line' && lines.length > 0) {
+        // Размножаем первую строку на весь документ
+        const firstLine = lines[0];
+        while (yPos < 260) {
+          pdf.text(firstLine, xMargin + 5, yPos);
+          yPos += lineHeight;
+        }
+      } else if (formData.fill_type === 'first_letter') {
+        // Размножаем первую букву каждой строки
+        lines.forEach(line => {
+          if (line.trim()) {
+            const firstLetter = line.trim()[0];
+            let repeatedLetters = '';
+            for (let i = 0; i < 20; i++) {
+              repeatedLetters += firstLetter + ' ';
+            }
+            pdf.text(repeatedLetters, xMargin + 5, yPos);
+            yPos += lineHeight;
+          } else {
+            yPos += lineHeight; // Пустая строка
+          }
+        });
+      } else {
+        // Обычное заполнение - используем текст как есть
+        lines.forEach(line => {
+          if (line.trim()) {
+            pdf.text(line, xMargin + 5, yPos);
+            yPos += lineHeight;
+          } else {
+            yPos += lineHeight; // Пустая строка
+          }
+        });
+      }
+      
+      // Добавляем дату и время
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ru-RU');
+      pdf.setFontSize(10);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(`Предпросмотр: ${dateStr}`, 20, 280);
+      
+      // Сохраняем PDF
+      const pdfUrl = pdf.output('datauristring');
+      
+      // Показываем превью, но НЕ скачиваем
+      setPreviewUrl(pdfUrl);
+      setPreviewType('pdf');
+      setInfoMessage(null);
+    } catch (error) {
+      console.error('Ошибка при генерации предпросмотра:', error);
+      setError('Не удалось создать предпросмотр. Попробуйте генерацию PDF напрямую.');
+    }
+    
+    setPreviewLoading(false);
+  };
+
   // Обработчик отправки формы
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setInfoMessage('Генерация PDF, пожалуйста подождите...');
-    setDownloadStarted(false);
-    setLastPdfUrl(null);
     
-    // Создаем FormData для отправки на сервер
-    const formPayload = new FormData();
-    for (const key in formData) {
-      formPayload.append(key, formData[key]);
-    }
-    
-    let success = false;
-    let errorMessages = [];
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    // Создаем axios-клиент с CORS-прокси
-    const axiosClient = axios.create({
-      responseType: 'blob',
-      headers: {
-        'Accept': 'application/pdf,image/*',
-        'Content-Type': 'multipart/form-data',
-        'Access-Control-Allow-Origin': '*',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      timeout: 90000,
-      withCredentials: false
-    });
-
-    // Отключаем трансформацию данных для CORS-прокси
-    axiosClient.defaults.transformRequest = [
-      (data, headers) => {
-        return data;
-      }
-    ];
-    
-    // Функция для работы с одним сервером с возможностью повторных попыток
-    const tryServer = async (apiUrl) => {
-      try {
-        console.log(`Пробуем сервер для генерации PDF: ${apiUrl} (попытка ${retryCount + 1})`);
-        const requestUrl = `${apiUrl}/generate-pdf`;
-        
-        // Добавляем случайное число для обхода кэша
-        const randomParam = `?_=${Date.now()}`;
-        
-        // Отправляем запрос
-        const response = await axiosClient.post(requestUrl + randomParam, formPayload);
-        
-        if (response.status === 200) {
-          const contentType = response.headers['content-type'];
-          
-          if (contentType && (contentType.includes('application/pdf') || contentType.includes('image/'))) {
-            const blob = new Blob([response.data], { type: contentType });
-            const url = URL.createObjectURL(blob);
-            
-            setPreviewUrl(url);
-            setPreviewType(contentType.includes('application/pdf') ? 'pdf' : 'image');
-            setLastPdfUrl(url);
-            
-            const downloadSuccess = downloadFile(url);
-            
-            if (downloadSuccess) {
-              setInfoMessage('PDF успешно сгенерирован. Если скачивание не началось автоматически, нажмите "Скачать снова".');
-            } else {
-              setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
-            }
-            return true;
-          } else {
-            throw new Error(`Некорректный формат: ${contentType}`);
-          }
-        } else {
-          throw new Error(`Сервер вернул статус ${response.status}`);
-        }
-      } catch (err) {
-        console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
-        if (err.response) {
-          console.error('Данные ответа:', err.response.data);
-          console.error('Статус:', err.response.status);
-          console.error('Заголовки:', err.response.headers);
-        }
-        errorMessages.push(`${apiUrl}: ${err.message}`);
-        return false;
-      }
-    };
-    
-    // Пробуем все серверы по очереди
-    while (!success && retryCount < maxRetries) {
-      for (let i = 0; i < config.API_URLS.length; i++) {
-        const apiUrl = config.API_URLS[i];
-        setCurrentApiUrl(apiUrl);
-        setCurrentApiIndex(i);
-        
-        success = await tryServer(apiUrl);
-        if (success) break;
-        
-        // Ждем немного перед следующей попыткой
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      
-      if (!success) {
-        retryCount++;
-        if (retryCount < maxRetries) {
-          setInfoMessage(`Повторная попытка ${retryCount + 1} из ${maxRetries}...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-    }
-    
-    if (!success) {
-      setError(`Не удалось сгенерировать PDF. Проверьте интернет-соединение и попробуйте упростить задание или повторите позже. Детали: ${errorMessages.length > 0 ? errorMessages[0] : 'серверы недоступны'}`);
-      // Показываем опцию резервной генерации
-      setShowFallbackOption(true);
-    } else {
-      setShowFallbackOption(false);
-    }
-    
-    setLoading(false);
+    // Используем локальную генерацию как основную
+    await generateFallbackPDF();
   };
 
   return (
@@ -626,20 +650,6 @@ const PropisiForm = () => {
       <div className="form-description">
         <p>Создавайте красивые прописи для обучения детей письму. Выберите варианты оформления и введите нужный текст.</p>
       </div>
-      
-      {/* Информация о текущем сервере */}
-      {currentApiUrl && (
-        <div className="current-server">
-          Используемый сервер: <strong>{currentApiUrl}</strong>
-          <button 
-            onClick={retryServerConnection}
-            className="server-refresh"
-            title="Проверить серверы"
-          >
-            ↻
-          </button>
-        </div>
-      )}
       
       <form onSubmit={handleSubmit}>
         {/* Секция разметки страницы */}
@@ -798,16 +808,6 @@ const PropisiForm = () => {
         {error && (
           <div className="error-message">
             {error}
-            {error.includes('недоступны') && (
-              <button 
-                type="button" 
-                className="button button-small" 
-                onClick={retryServerConnection}
-                style={{marginLeft: '10px', padding: '5px 10px', fontSize: '0.9rem'}}
-              >
-                Проверить снова
-              </button>
-            )}
           </div>
         )}
 
@@ -837,7 +837,7 @@ const PropisiForm = () => {
             {previewLoading ? 'Загрузка...' : 'Предпросмотр'}
           </button>
           
-          {/* Кнопка отправки */}
+          {/* Кнопка основной генерации */}
           <button 
             type="submit" 
             className="button" 
@@ -855,18 +855,6 @@ const PropisiForm = () => {
               disabled={loading || previewLoading}
             >
               Скачать снова
-            </button>
-          )}
-          
-          {/* Кнопка резервной генерации */}
-          {showFallbackOption && (
-            <button 
-              type="button"
-              className="button button-fallback"
-              onClick={generateFallbackPDF}
-              disabled={loading || previewLoading}
-            >
-              Сгенерировать локально
             </button>
           )}
         </div>
