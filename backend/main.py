@@ -53,8 +53,8 @@ class PropisiRequest(BaseModel):
 if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
 else:
-    temp_dir = "temp"
-    os.makedirs(temp_dir, exist_ok=True)
+temp_dir = "temp"
+os.makedirs(temp_dir, exist_ok=True)
 
 # Регистрируем шрифты
 FONT_LOADED = False
@@ -78,6 +78,9 @@ try:
             print(f"  - {f}")
     else:
         print(f"Директория {fonts_dir} не найдена!")
+        # Создаем директорию, если она не существует
+        os.makedirs(fonts_dir, exist_ok=True)
+        print(f"Директория {fonts_dir} была создана")
     
     # Пробуем сначала ilyukhina.ttf
     ilyukhina_path = os.path.join(fonts_dir, "ilyukhina.ttf")
@@ -96,11 +99,13 @@ try:
             print("Шрифт propisi.ttf успешно загружен")
         else:
             print("Ни один из шрифтов не найден или файлы повреждены!")
+            print("Будем использовать стандартный шрифт Helvetica")
             FONT_LOADED = False
 except Exception as e:
     print(f"Ошибка при загрузке шрифта: {e}")
     import traceback
     traceback.print_exc()
+    print("Будем использовать стандартный шрифт Helvetica из-за ошибки")
     FONT_LOADED = False
 
 # Определяем шрифт, который будет использоваться
@@ -227,11 +232,11 @@ async def generate_pdf(
         # Определяем ориентацию страницы
         page_size = landscape(A4) if page_orientation == "landscape" else A4
         print(f"Размер страницы: {page_size}")
-    
+        
         # Создаем PDF в памяти
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=page_size)
-    
+        
         # Минимальные отступы страницы 
         margin_left = 2
         margin_right = 2
@@ -393,15 +398,23 @@ async def generate_pdf(
             
             # Добавляем текст, если есть
             if i < len(processed_lines) and processed_lines[i]:
-                # Используем шрифт прописей, если доступен
+                # Используем шрифт прописей, если доступен, или запасной вариант
                 try:
                     # Фиксированный размер шрифта для прописей
                     font_size = 20 if page_layout == "cells" else 28  # Увеличиваем размер шрифта для линеек
-                    c.setFont(DEFAULT_FONT, font_size)
-                except:
+                    # Проверяем еще раз доступность шрифта
+                    if DEFAULT_FONT in ["Propisi", "Helvetica-Oblique"]:
+                        c.setFont(DEFAULT_FONT, font_size)
+                    else:
+                        # Если что-то пошло не так, используем гарантированно доступный шрифт
+                        c.setFont("Helvetica-Oblique", font_size)
+                        print(f"Используем запасной шрифт Helvetica-Oblique для символа {i}")
+                except Exception as font_error:
                     # Запасной вариант со стандартным шрифтом
+                    print(f"Ошибка при установке шрифта: {font_error}")
                     font_size = 14 if page_layout == "cells" else 24
-                    c.setFont("Helvetica-Italic", font_size)
+                    c.setFont("Helvetica-Oblique", font_size)
+                    print("Используем запасной шрифт Helvetica-Oblique из-за ошибки")
                 
                 # Применение стилей для букв
                 for j, char in enumerate(processed_lines[i]):
@@ -691,18 +704,26 @@ async def generate_preview(
                 group_height = line_height * 2  # Общая высота группы из трех линий
                 line_gap = 0  # Полностью убираем отступы
                 base_y = y_start - i * (group_height + line_gap)  # Точно по средней линии
-            
+        
             # Добавляем текст, если есть
             if i < len(processed_lines) and processed_lines[i]:
-                # Используем шрифт прописей, если доступен
+                # Используем шрифт прописей, если доступен, или запасной вариант
                 try:
                     # Фиксированный размер шрифта для прописей
                     font_size = 20 if page_layout == "cells" else 28  # Увеличиваем размер шрифта для линеек
-                    c.setFont(DEFAULT_FONT, font_size)
-                except:
+                    # Проверяем еще раз доступность шрифта
+                    if DEFAULT_FONT in ["Propisi", "Helvetica-Oblique"]:
+                        c.setFont(DEFAULT_FONT, font_size)
+                    else:
+                        # Если что-то пошло не так, используем гарантированно доступный шрифт
+                        c.setFont("Helvetica-Oblique", font_size)
+                        print(f"Используем запасной шрифт Helvetica-Oblique для символа {i}")
+                except Exception as font_error:
                     # Запасной вариант со стандартным шрифтом
+                    print(f"Ошибка при установке шрифта: {font_error}")
                     font_size = 14 if page_layout == "cells" else 24
-                    c.setFont("Helvetica-Italic", font_size)
+                    c.setFont("Helvetica-Oblique", font_size)
+                    print("Используем запасной шрифт Helvetica-Oblique из-за ошибки")
                 
                 # Применение стилей для букв
                 for j, char in enumerate(processed_lines[i]):
@@ -773,10 +794,10 @@ async def generate_preview(
         red_line_top = page_size[1] - 1  # Почти до верха страницы
         red_line_bottom = 1  # Почти до низа страницы
         c.line(red_line_x, red_line_top, red_line_x, red_line_bottom)
-        
-        c.save()
-        
-        # Получаем данные из буфера и сохраняем в файл
+    
+    c.save()
+    
+    # Получаем данные из буфера и сохраняем в файл
         buffer.seek(0)
         pdf_data = buffer.getvalue()
         
@@ -791,7 +812,7 @@ async def generate_preview(
         from fastapi.responses import Response
         return Response(
             content=pdf_data,
-            media_type="application/pdf",
+        media_type="application/pdf", 
             headers={"Content-Disposition": "inline; filename=preview.pdf"}
         )
     except Exception as e:
@@ -811,7 +832,7 @@ async def root():
 def shutdown_event():
     # Не удаляем системную /tmp директорию
     if temp_dir != "/tmp":
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    shutil.rmtree(temp_dir, ignore_errors=True)
     else:
         # Удаляем только наши файлы в /tmp
         import glob
