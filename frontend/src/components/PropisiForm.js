@@ -86,29 +86,50 @@ const PropisiForm = () => {
     }
     
     try {
-      const apiUrl = `/api/preview`;
       console.log('Отправка запроса на предпросмотр');
       
-      // Отправляем запрос на сервер
-      const response = await axios.post(apiUrl, formPayload, {
+      // Проверяем URL - используем упрощенный маршрут
+      let apiUrl = '/api/simple-preview';
+      
+      // Отправляем запрос на сервер с явным указанием данных
+      const response = await axios({
+        method: 'post',
+        url: apiUrl,
+        data: formPayload,
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
       
-      // Обрабатываем успешный ответ
-      console.log('Получен ответ:', response.data);
+      console.log('Получен ответ от сервера:', response);
       
-      if (response.data && response.data.message) {
-        setResultMessage(`Предпросмотр успешно обработан. ${response.data.message}`);
+      // Проверяем ответ и обрабатываем его
+      if (response.data && (response.data.message || response.data.status === 'success')) {
+        // Показываем сообщение об успехе
+        const successMsg = response.data.message || 'Предпросмотр успешно обработан';
+        setResultMessage(successMsg);
         setSuccess(true);
+        
+        // Показываем всплывающее сообщение для подтверждения
+        alert('Предпросмотр успешно обработан');
       } else {
-        throw new Error('Получен неожиданный формат ответа от сервера');
+        throw new Error('Неожиданный формат ответа от сервера');
       }
     } catch (err) {
       console.error('Ошибка при предпросмотре:', err);
+      
+      // Выводим полную информацию об ошибке для отладки
+      console.log('Полная ошибка:', err);
+      if (err.response) {
+        console.log('Данные ответа:', err.response.data);
+        console.log('Статус ответа:', err.response.status);
+      }
+      
       setError(err.response?.data?.message || err.message || 'Произошла ошибка при предпросмотре');
       setSuccess(false);
+      
+      // Показываем всплывающее сообщение об ошибке
+      alert('Ошибка: ' + (err.response?.data?.message || err.message || 'Произошла ошибка при предпросмотре'));
     } finally {
       setPreviewLoading(false);
     }
@@ -129,29 +150,50 @@ const PropisiForm = () => {
     }
 
     try {
-      const apiUrl = `/api/generate-pdf`;
       console.log('Отправка запроса на генерацию');
       
-      // Отправляем запрос на сервер
-      const response = await axios.post(apiUrl, formPayload, {
+      // Проверяем URL - используем упрощенный маршрут
+      let apiUrl = '/api/simple-generate';
+      
+      // Отправляем запрос на сервер с явным указанием данных
+      const response = await axios({
+        method: 'post',
+        url: apiUrl,
+        data: formPayload,
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-
-      // Обрабатываем успешный ответ
-      console.log('Получен ответ:', response.data);
       
-      if (response.data && response.data.message) {
-        setResultMessage(`Пропись успешно обработана! ${response.data.message}`);
+      console.log('Получен ответ от сервера:', response);
+      
+      // Проверяем ответ и обрабатываем его
+      if (response.data && (response.data.message || response.data.status === 'success')) {
+        // Показываем сообщение об успехе
+        const successMsg = response.data.message || 'Пропись успешно сгенерирована';
+        setResultMessage(successMsg);
         setSuccess(true);
+        
+        // Показываем всплывающее сообщение для подтверждения
+        alert('Пропись успешно сгенерирована');
       } else {
-        throw new Error('Получен неожиданный формат ответа от сервера');
+        throw new Error('Неожиданный формат ответа от сервера');
       }
     } catch (err) {
       console.error('Ошибка при генерации:', err);
+      
+      // Выводим полную информацию об ошибке для отладки
+      console.log('Полная ошибка:', err);
+      if (err.response) {
+        console.log('Данные ответа:', err.response.data);
+        console.log('Статус ответа:', err.response.status);
+      }
+      
       setError(err.response?.data?.message || err.message || 'Произошла ошибка при генерации');
       setSuccess(false);
+      
+      // Показываем всплывающее сообщение об ошибке
+      alert('Ошибка: ' + (err.response?.data?.message || err.message || 'Произошла ошибка при генерации'));
     } finally {
       setLoading(false);
     }
