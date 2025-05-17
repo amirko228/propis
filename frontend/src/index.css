@@ -13,6 +13,21 @@
   box-shadow: 0 0 0 0.2rem rgba(142, 68, 173, 0.25);
 }
 
+/* Стиль для кнопки серверной генерации */
+.button-server {
+  background-color: #3498db;
+  border: 1px solid #2980b9;
+  color: white;
+}
+
+.button-server:hover {
+  background-color: #2980b9;
+}
+
+.button-server:focus {
+  box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
 /* Стили для индикатора загрузки */
 .loading-spinner {
   display: inline-block;
