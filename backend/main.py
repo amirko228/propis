@@ -223,17 +223,12 @@ async def generate_pdf(
         print(f"- student_name: {student_name}")
         print(f"- text length: {len(text)} символов")
         
-        # Создаем временный файл для PDF с уникальным именем
-        import uuid
-        unique_id = str(uuid.uuid4())
-        pdf_path = os.path.join(temp_dir, f"propisi_{unique_id}.pdf")
-        print(f"Временный путь PDF: {pdf_path}")
-        
+        # Создаем PDF сразу в памяти без записи на диск
         # Определяем ориентацию страницы
         page_size = landscape(A4) if page_orientation == "landscape" else A4
         print(f"Размер страницы: {page_size}")
         
-        # Создаем PDF
+        # Создаем PDF в памяти
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=page_size)
     
@@ -463,7 +458,7 @@ async def generate_pdf(
                         c.drawString(x, this_base_y, char)
                     else:  # "black"
                         # Черный цвет для букв
-        c.setFillColor(black)
+                        c.setFillColor(black)
                         c.drawString(x, this_base_y, char)
     
     # Добавляем красную линию по правой стороне как в тетради
@@ -481,24 +476,24 @@ async def generate_pdf(
     
     c.save()
     
-    # Получаем данные из буфера и сохраняем в файл
-        with open(pdf_path, "wb") as f:
-            f.write(buffer.getvalue())
-        
-        print(f"PDF файл создан: {pdf_path}")
-        
-        # Проверяем размер созданного файла
-        file_size = os.path.getsize(pdf_path)
-        print(f"Размер PDF файла: {file_size} байт")
-        
-        if file_size == 0:
-            raise HTTPException(status_code=500, detail="Создан пустой PDF файл")
-        
-        return FileResponse(
-            pdf_path, 
-            media_type="application/pdf", 
-            filename="propisi.pdf"
-        )
+    # Получаем данные из буфера и возвращаем напрямую
+    buffer.seek(0)
+    pdf_data = buffer.getvalue()
+    
+    # Проверяем размер созданного PDF
+    file_size = len(pdf_data)
+    print(f"Размер PDF файла в памяти: {file_size} байт")
+    
+    if file_size == 0:
+        raise HTTPException(status_code=500, detail="Создан пустой PDF файл")
+    
+    # Возвращаем PDF напрямую из памяти
+    from fastapi.responses import Response
+    return Response(
+        content=pdf_data, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=propisi.pdf"}
+    )
     except Exception as e:
         # Логируем ошибку и возвращаем детальную информацию
         import traceback
@@ -518,7 +513,7 @@ async def generate_preview(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Генерирует предварительный просмотр страницы прописи в формате PNG
+    Генерирует предварительный просмотр страницы прописи в формате PDF
     """
     try:
         # Логируем полученные параметры
@@ -531,17 +526,13 @@ async def generate_preview(
         print(f"- student_name: {student_name}")
         print(f"- text length: {len(text)} символов")
         
-        # Создаем временный файл для PDF с уникальным именем
-        import uuid
-        unique_id = str(uuid.uuid4())
-        temp_pdf_path = os.path.join(temp_dir, f"preview_{unique_id}.pdf")
-        temp_png_path = os.path.join(temp_dir, f"preview_{unique_id}.png")
-        print(f"Временные пути: PDF={temp_pdf_path}, PNG={temp_png_path}")
+        # Создаем PDF сразу в памяти
+        print("Создаем PDF в памяти для предпросмотра")
     
     # Определяем ориентацию страницы
     page_size = landscape(A4) if page_orientation == "landscape" else A4
     
-    # Создаем PDF
+    # Создаем PDF в памяти
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=page_size)
     
@@ -787,63 +778,26 @@ async def generate_preview(
     
     c.save()
     
-    # Сохраняем PDF
-    with open(temp_pdf_path, "wb") as f:
-        f.write(buffer.getvalue())
+    # Получаем данные из буфера и сохраняем в файл
+    c.save()
+    buffer.seek(0)
+    pdf_data = buffer.getvalue()
     
-    try:
-        # Конвертируем PDF в PNG для предпросмотра
-        import subprocess
-        from PIL import Image
-        
-        # Проверяем наличие poppler-utils или другого инструмента для конвертации PDF
-        try:
-            # Пробуем использовать pdf2image (который в свою очередь использует poppler)
-            from pdf2image import convert_from_path
-            
-            # Конвертируем только первую страницу
-            images = convert_from_path(temp_pdf_path, dpi=150, first_page=1, last_page=1)
-            if images:
-                # Сохраняем изображение
-                images[0].save(temp_png_path, 'PNG')
-                return FileResponse(
-                    temp_png_path, 
-                    media_type="image/png", 
-                    filename="preview.png"
-                )
-        except ImportError:
-            # Если pdf2image не установлен, можно попробовать другие методы
-            # Например, использовать ImageMagick через subprocess
-            try:
-                subprocess.run(["convert", "-density", "150", temp_pdf_path, "-quality", "90", temp_png_path], check=True)
-                return FileResponse(
-                    temp_png_path, 
-                    media_type="image/png", 
-                    filename="preview.png"
-                )
-            except (subprocess.SubprocessError, FileNotFoundError):
-                # Если и это не сработало, возвращаем PDF как запасной вариант
-                print("ImageMagick не найден, возвращаем PDF напрямую")
-                pass
-    except Exception as e:
-        print(f"Ошибка при конвертации PDF в PNG: {e}")
+    # Проверяем размер PDF
+    file_size = len(pdf_data)
+    print(f"Размер PDF файла для предпросмотра: {file_size} байт")
     
-        # В случае ошибки конвертации возвращаем PDF
-        print("Конвертация в PNG не удалась, возвращаем PDF напрямую")
-        
-        # Проверяем размер созданного файла
-        file_size = os.path.getsize(temp_pdf_path)
-        print(f"Размер PDF файла для предпросмотра: {file_size} байт")
-        
-        if file_size == 0:
-            raise HTTPException(status_code=500, detail="Создан пустой PDF файл для предпросмотра")
-            
-        return FileResponse(
-            temp_pdf_path, 
-            media_type="application/pdf", 
-            filename="preview.pdf"
-        )
-    except Exception as e:
+    if file_size == 0:
+        raise HTTPException(status_code=500, detail="Создан пустой PDF файл для предпросмотра")
+    
+    # Возвращаем PDF напрямую из памяти
+    from fastapi.responses import Response
+    return Response(
+        content=pdf_data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=preview.pdf"}
+    )
+except Exception as e:
         # Логируем ошибку и возвращаем детальную информацию
         import traceback
         error_details = traceback.format_exc()

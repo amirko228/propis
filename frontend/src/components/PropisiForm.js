@@ -196,23 +196,20 @@ const PropisiForm = () => {
     }
     
     try {
-      // URL API для предпросмотра
-      const apiUrl = `${config.API_URL}/api/preview`;
+      // URL API для предпросмотра - используем явно указанный URL без API_URL
+      // Так как у нас все на одном домене
+      const apiUrl = `/api/preview`;
       console.log('Отправка запроса на предпросмотр:', apiUrl);
-      
-      // Проверяем, что API URL не пустой
-      if (!apiUrl || apiUrl === '/api/preview') {
-        throw new Error('Неправильно настроен API URL. Проверьте конфигурацию.');
-      }
       
       console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
       
       // Отправляем запрос на генерацию предпросмотра
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем данные как бинарный файл
-        timeout: 30000, // 30 секунд таймаут
+        timeout: 60000, // 60 секунд таймаут
         headers: {
-          'Accept': 'application/pdf, image/*'
+          'Accept': 'application/pdf, image/*',
+          'Content-Type': 'multipart/form-data'
         }
       });
       
@@ -271,23 +268,20 @@ const PropisiForm = () => {
     }
 
     try {
-      // URL API бэкенда
-      const apiUrl = `${config.API_URL}/api/generate-pdf`;
+      // URL API бэкенда - используем явно указанный URL без API_URL
+      // Так как у нас все на одном домене
+      const apiUrl = `/api/generate-pdf`;
       console.log('Отправка запроса на генерацию PDF:', apiUrl);
-      
-      // Проверяем, что API URL не пустой
-      if (!apiUrl || apiUrl === '/api/generate-pdf') {
-        throw new Error('Неправильно настроен API URL. Проверьте конфигурацию.');
-      }
       
       console.log('Отправляемые данные:', Object.fromEntries(formPayload.entries()));
       
       // Отправляем запрос на генерацию PDF
       const response = await axios.post(apiUrl, formPayload, {
         responseType: 'blob', // Получаем PDF как бинарный файл
-        timeout: 30000, // 30 секунд таймаут
+        timeout: 60000, // 60 секунд таймаут
         headers: {
-          'Accept': 'application/pdf'
+          'Accept': 'application/pdf',
+          'Content-Type': 'multipart/form-data'
         }
       });
 
