@@ -196,12 +196,10 @@ const PropisiForm = () => {
         const apiUrl = config.API_URLS[i];
         try {
           console.log(`Проверяем API: ${apiUrl}`);
-          const response = await axios.get(`${apiUrl}/health`, { 
-            timeout: 3000,
-            validateStatus: status => status === 200 
-          });
+          // Сначала проверяем с меньшим таймаутом
+          const isAvailable = await checkApiAvailability(apiUrl, 2000);
           
-          if (response.status === 200) {
+          if (isAvailable) {
             setCurrentApiUrl(apiUrl);
             setCurrentApiIndex(i);
             apiFound = true;
@@ -211,27 +209,6 @@ const PropisiForm = () => {
           }
         } catch (err) {
           console.log(`API ${apiUrl} недоступен: ${err.message}`);
-          
-          // Если это локальный сервер, попробуем основной endpoint
-          if (apiUrl === 'http://localhost:8000') {
-            try {
-              const rootResponse = await axios.get(`${apiUrl}/`, { 
-                timeout: 3000,
-                validateStatus: status => status === 200 
-              });
-              
-              if (rootResponse.status === 200) {
-                setCurrentApiUrl(apiUrl);
-                setCurrentApiIndex(i);
-                apiFound = true;
-                console.log(`Локальный API доступен: ${apiUrl}`);
-                setInfoMessage(null);
-                break;
-              }
-            } catch (rootErr) {
-              console.log(`Локальный API недоступен: ${rootErr.message}`);
-            }
-          }
         }
       }
       
@@ -248,27 +225,45 @@ const PropisiForm = () => {
   }, []);
   
   // Функция проверки доступности API
-  const checkApiAvailability = async (apiUrl = currentApiUrl) => {
+  const checkApiAvailability = async (apiUrl = currentApiUrl, timeout = 3000) => {
     try {
       console.log(`Проверяем доступность API: ${apiUrl}`);
-      // Пробуем сначала /health
+      
+      // Используем fetch вместо axios для более надежной проверки
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
       try {
-        const response = await axios.get(`${apiUrl}/health`, { 
-          timeout: 3000,
-          validateStatus: status => status === 200
+        const response = await fetch(`${apiUrl}/health`, { 
+          signal: controller.signal,
+          mode: 'cors',
+          cache: 'no-cache',
         });
-        return response.status === 200;
-      } catch (err) {
+        
+        clearTimeout(timeoutId);
+        return response.ok;
+      } catch (healthErr) {
         // Если /health не работает, пробуем корневой path
-        console.log(`Эндпоинт /health недоступен, пробуем корневой path`);
-        const rootResponse = await axios.get(`${apiUrl}/`, { 
-          timeout: 3000,
-          validateStatus: status => status === 200
+        console.log(`Эндпоинт /health недоступен для ${apiUrl}, пробуем корневой path`);
+        
+        const rootController = new AbortController();
+        const rootTimeoutId = setTimeout(() => rootController.abort(), timeout);
+        
+        const rootResponse = await fetch(`${apiUrl}/`, { 
+          signal: rootController.signal,
+          mode: 'cors',
+          cache: 'no-cache',
         });
-        return rootResponse.status === 200;
+        
+        clearTimeout(rootTimeoutId);
+        return rootResponse.ok;
       }
     } catch (err) {
-      console.error(`API ${apiUrl} недоступен: ${err.message}`);
+      if (err.name === 'AbortError') {
+        console.error(`Таймаут при проверке API ${apiUrl}`);
+      } else {
+        console.error(`API ${apiUrl} недоступен: ${err.message}`);
+      }
       return false;
     }
   };
@@ -308,17 +303,24 @@ const PropisiForm = () => {
     let success = false;
     let attempts = 0;
     
+    // Проверяем доступность серверов перед отправкой запроса
+    const isCurrentApiAvailable = await checkApiAvailability(apiUrl);
+    if (!isCurrentApiAvailable) {
+      // Если текущий API недоступен, перебираем все серверы
+      for (let i = 0; i < config.API_URLS.length; i++) {
+        const testApiUrl = config.API_URLS[i];
+        if (await checkApiAvailability(testApiUrl)) {
+          apiUrl = testApiUrl;
+          setCurrentApiUrl(apiUrl);
+          setCurrentApiIndex(i);
+          break;
+        }
+      }
+    }
+    
     // Пробуем все доступные API
     while (!success && attempts < config.API_URLS.length) {
       try {
-        // Проверка доступности текущего API
-        const isApiAvailable = await checkApiAvailability(apiUrl);
-        if (!isApiAvailable) {
-          apiUrl = switchToNextApi();
-          attempts++;
-          continue;
-        }
-        
         // URL API для предпросмотра
         const requestUrl = `${apiUrl}/preview`;
         console.log('Отправляем запрос превью на:', requestUrl);
@@ -330,7 +332,7 @@ const PropisiForm = () => {
             'Accept': 'application/pdf,image/*',
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 25000, // Увеличиваем таймаут до 25 секунд
+          timeout: 30000, // Увеличиваем таймаут до 30 секунд
           withCredentials: false
         });
         
@@ -383,13 +385,13 @@ const PropisiForm = () => {
         // Если перепробовали все API, показываем ошибку
         if (attempts >= config.API_URLS.length) {
           if (err.code === 'ECONNABORTED') {
-            setError('Превышено время ожидания ответа. Все серверы перегружены, попробуйте позже.');
+            setError('Превышено время ожидания ответа. Попробуйте еще раз через минуту.');
           } else if (err.response) {
             setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
           } else if (err.request) {
-            setError('Все серверы не отвечают. Попробуйте позже или проверьте подключение к интернету.');
+            setError('Серверы не отвечают. Проверьте подключение к интернету и обновите страницу.');
           } else {
-            setError(`Ошибка: ${err.message}`);
+            setError(`Ошибка: ${err.message}. Попробуйте еще раз.`);
           }
         }
       }
@@ -451,17 +453,21 @@ const PropisiForm = () => {
     setInfoMessage('Повторная проверка серверов...');
     setError(null);
     
+    // Сброс текущего сервера, чтобы проверить все заново
     let apiFound = false;
-    // Проверяем все API по очереди
+    
+    // Проверяем все API по очереди с коротким таймаутом для быстрого ответа пользователю
     for (let i = 0; i < config.API_URLS.length; i++) {
       const apiUrl = config.API_URLS[i];
       try {
-        const isAvailable = await checkApiAvailability(apiUrl);
+        setInfoMessage(`Проверка сервера ${i+1} из ${config.API_URLS.length}...`);
+        // Проверяем с небольшим таймаутом для быстрого ответа
+        const isAvailable = await checkApiAvailability(apiUrl, 1500);
         if (isAvailable) {
           setCurrentApiUrl(apiUrl);
           setCurrentApiIndex(i);
           apiFound = true;
-          setInfoMessage(`Сервер ${apiUrl} доступен`);
+          setInfoMessage(`Сервер ${apiUrl} доступен и будет использован для запросов`);
           setTimeout(() => setInfoMessage(null), 3000);
           break;
         }
@@ -470,8 +476,31 @@ const PropisiForm = () => {
       }
     }
     
+    // Если не нашли ни одного сервера, попробуем еще раз с увеличенным таймаутом
     if (!apiFound) {
-      setError('Все серверы недоступны. Проверьте подключение к интернету или запустите локальный сервер.');
+      setInfoMessage('Повторная проверка с увеличенным временем ожидания...');
+      
+      for (let i = 0; i < config.API_URLS.length; i++) {
+        const apiUrl = config.API_URLS[i];
+        try {
+          // Проверяем с увеличенным таймаутом
+          const isAvailable = await checkApiAvailability(apiUrl, 5000);
+          if (isAvailable) {
+            setCurrentApiUrl(apiUrl);
+            setCurrentApiIndex(i);
+            apiFound = true;
+            setInfoMessage(`Сервер ${apiUrl} доступен, но отвечает медленно. Запросы могут занимать больше времени.`);
+            setTimeout(() => setInfoMessage(null), 5000);
+            break;
+          }
+        } catch (err) {
+          console.error(`Ошибка при повторной проверке API ${apiUrl}:`, err);
+        }
+      }
+    }
+    
+    if (!apiFound) {
+      setError('Все серверы недоступны. Проверьте подключение к интернету или повторите попытку позже.');
     }
   };
 
@@ -494,18 +523,25 @@ const PropisiForm = () => {
     let success = false;
     let attempts = 0;
     
+    // Проверяем доступность серверов перед отправкой запроса
+    const isCurrentApiAvailable = await checkApiAvailability(apiUrl);
+    if (!isCurrentApiAvailable) {
+      // Если текущий API недоступен, перебираем все серверы
+      for (let i = 0; i < config.API_URLS.length; i++) {
+        const testApiUrl = config.API_URLS[i];
+        if (await checkApiAvailability(testApiUrl)) {
+          apiUrl = testApiUrl;
+          setCurrentApiUrl(apiUrl);
+          setCurrentApiIndex(i);
+          console.log(`Переключились на доступный API: ${apiUrl}`);
+          break;
+        }
+      }
+    }
+    
     // Пробуем все доступные API
     while (!success && attempts < config.API_URLS.length) {
       try {
-        // Проверка доступности текущего API
-        const isApiAvailable = await checkApiAvailability(apiUrl);
-        if (!isApiAvailable) {
-          console.log(`API ${apiUrl} недоступен, переключаемся на следующий`);
-          apiUrl = switchToNextApi();
-          attempts++;
-          continue;
-        }
-        
         // URL API для генерации PDF
         const requestUrl = `${apiUrl}/generate-pdf`;
         console.log('Отправляем запрос на:', requestUrl);
@@ -517,7 +553,7 @@ const PropisiForm = () => {
             'Accept': 'application/pdf',
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 60000, // Увеличиваем таймаут до 60 секунд
+          timeout: 60000, // Таймаут 60 секунд
           withCredentials: false
         });
         
@@ -584,13 +620,13 @@ const PropisiForm = () => {
         // Если перепробовали все API, показываем ошибку
         if (attempts >= config.API_URLS.length) {
           if (err.code === 'ECONNABORTED') {
-            setError('Превышено время ожидания ответа. Серверы перегружены, попробуйте позже.');
+            setError('Превышено время ожидания ответа. Попробуйте позже или уменьшите размер текста.');
           } else if (err.response) {
             setError(`Ошибка сервера (${err.response.status}): ${err.response.statusText || 'Попробуйте позже'}`);
           } else if (err.request) {
-            setError('Серверы не отвечают. Пожалуйста, проверьте подключение к интернету и попробуйте позже.');
+            setError('Проблема подключения к серверам. Проверьте интернет и обновите страницу.');
           } else {
-            setError(`Ошибка: ${err.message}`);
+            setError(`Ошибка: ${err.message}. Попробуйте позже.`);
           }
         }
       }
