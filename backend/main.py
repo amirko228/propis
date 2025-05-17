@@ -206,8 +206,10 @@ async def generate_pdf(
     page_orientation: Annotated[str, Form()],
     student_name: Annotated[Union[str, None], Form()] = None
 ):
-    # Создаем временный файл для PDF
-    pdf_path = os.path.join(temp_dir, "propisi.pdf")
+    # Создаем временный файл для PDF с уникальным именем
+    import uuid
+    unique_id = str(uuid.uuid4())
+    pdf_path = os.path.join(temp_dir, f"propisi_{unique_id}.pdf")
     
     # Определяем ориентацию страницы
     page_size = landscape(A4) if page_orientation == "landscape" else A4
@@ -483,9 +485,11 @@ async def generate_preview(
     """
     Генерирует предварительный просмотр страницы прописи в формате PNG
     """
-    # Создаем временный файл для PDF
-    temp_pdf_path = os.path.join(temp_dir, "preview.pdf")
-    temp_png_path = os.path.join(temp_dir, "preview.png")
+    # Создаем временный файл для PDF с уникальным именем
+    import uuid
+    unique_id = str(uuid.uuid4())
+    temp_pdf_path = os.path.join(temp_dir, f"preview_{unique_id}.pdf")
+    temp_png_path = os.path.join(temp_dir, f"preview_{unique_id}.png")
     
     # Определяем ориентацию страницы
     page_size = landscape(A4) if page_orientation == "landscape" else A4
@@ -772,6 +776,7 @@ async def generate_preview(
                 )
             except (subprocess.SubprocessError, FileNotFoundError):
                 # Если и это не сработало, возвращаем PDF как запасной вариант
+                print("ImageMagick не найден, возвращаем PDF напрямую")
                 pass
     except Exception as e:
         print(f"Ошибка при конвертации PDF в PNG: {e}")
@@ -790,7 +795,27 @@ async def root():
 # Удаление временных файлов при выключении сервера
 @app.on_event("shutdown")
 def shutdown_event():
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    # Не удаляем системную /tmp директорию
+    if temp_dir != "/tmp":
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    else:
+        # Удаляем только наши файлы в /tmp
+        import glob
+        for f in glob.glob(os.path.join(temp_dir, "propisi_*.pdf")):
+            try:
+                os.remove(f)
+            except:
+                pass
+        for f in glob.glob(os.path.join(temp_dir, "preview_*.pdf")):
+            try:
+                os.remove(f)
+            except:
+                pass
+        for f in glob.glob(os.path.join(temp_dir, "preview_*.png")):
+            try:
+                os.remove(f)
+            except:
+                pass
 
 if __name__ == "__main__":
     import uvicorn

@@ -205,7 +205,8 @@ const PropisiForm = () => {
       });
       
       // Определяем тип ответа
-      const contentType = response.headers['content-type'];
+      const contentType = response.headers['content-type'] || 'application/pdf';
+      console.log('Получен тип контента:', contentType);
       
       // Создаем URL объект для отображения
       const blob = new Blob([response.data], { type: contentType });
@@ -214,6 +215,7 @@ const PropisiForm = () => {
       // Сохраняем URL для предпросмотра
       setPreviewUrl(url);
       setPreviewType(contentType.includes('image') ? 'image' : 'pdf');
+      console.log('Установлен тип предпросмотра:', contentType.includes('image') ? 'image' : 'pdf');
     } catch (err) {
       console.error('Ошибка при загрузке предпросмотра:', err);
       setError('Не удалось загрузить предпросмотр. Попробуйте еще раз.');
@@ -244,23 +246,26 @@ const PropisiForm = () => {
       });
 
       // Проверяем, что получили PDF
-      if (response.headers['content-type'] === 'application/pdf') {
-      // Создаем URL для скачивания PDF
+      const contentType = response.headers['content-type'];
+      if (contentType === 'application/pdf' || contentType.includes('application/pdf')) {
+        // Создаем URL для скачивания PDF
         const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
         const url = URL.createObjectURL(pdfBlob);
         
         // Сохраняем URL для предпросмотра
         setPreviewUrl(url);
+        setPreviewType('pdf');
         
         // Создаем ссылку для скачивания
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'propisi.pdf');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'propisi.pdf');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       } else {
-        throw new Error('Сервер не вернул PDF документ');
+        console.error('Неверный тип контента:', contentType);
+        throw new Error(`Сервер не вернул PDF документ. Получен тип: ${contentType}`);
       }
     } catch (err) {
       console.error('Ошибка при генерации PDF:', err);
