@@ -21,6 +21,28 @@ try {
   console.error('Ошибка при инициализации PDF worker:', e);
 }
 
+// Создаем axios-клиент с настройками для проверки
+const checkAxios = axios.create({
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'X-Requested-With': 'XMLHttpRequest'
+  }
+});
+
+// Функция для проверки доступности сервера
+const checkServerAvailability = async (url) => {
+  try {
+    // Проверяем доступность с помощью простого GET-запроса
+    const response = await checkAxios.get(`${url}/health`, { timeout: 5000 });
+    return response.status === 200;
+  } catch (error) {
+    console.log(`Сервер ${url} недоступен:`, error.message);
+    return false;
+  }
+};
+
 // Компонент предпросмотра (может отображать как PDF, так и изображения)
 const PreviewViewer = ({ previewUrl, previewType }) => {
   const [numPages, setNumPages] = useState(null);
@@ -209,6 +231,8 @@ const PropisiForm = () => {
   const [downloadStarted, setDownloadStarted] = useState(false);
   // Последний сгенерированный PDF URL
   const [lastPdfUrl, setLastPdfUrl] = useState(null);
+  // Состояние для отображения резервной опции
+  const [showFallbackOption, setShowFallbackOption] = useState(false);
 
   // Функция для переключения на следующий доступный API
   const switchToNextApi = () => {
@@ -263,6 +287,26 @@ const PropisiForm = () => {
     
     let success = false;
     
+    // Создаем axios-клиент с CORS-прокси
+    const axiosClient = axios.create({
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/pdf,image/*',
+        'Content-Type': 'multipart/form-data',
+        'Access-Control-Allow-Origin': '*',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      timeout: 60000,
+      withCredentials: false
+    });
+
+    // Отключаем трансформацию данных для CORS-прокси
+    axiosClient.defaults.transformRequest = [
+      (data, headers) => {
+        return data;
+      }
+    ];
+    
     // Пробуем все серверы по очереди
     for (let i = 0; i < config.API_URLS.length; i++) {
       const apiUrl = config.API_URLS[i];
@@ -273,18 +317,11 @@ const PropisiForm = () => {
         console.log(`Пробуем сервер для превью: ${apiUrl}`);
         const requestUrl = `${apiUrl}/preview`;
         
+        // Добавляем случайное число для обхода кэша
+        const randomParam = `?_=${Date.now()}`;
+        
         // Отправляем запрос с увеличенным таймаутом
-        const response = await axios.post(requestUrl, formPayload, {
-          responseType: 'blob',
-          headers: {
-            'Accept': 'application/pdf,image/*',
-            'Content-Type': 'multipart/form-data',
-            'Access-Control-Allow-Origin': '*',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 60000, // Увеличиваем таймаут до 60 секунд
-          withCredentials: false
-        });
+        const response = await axiosClient.post(requestUrl + randomParam, formPayload);
         
         if (response.status === 200) {
           const contentType = response.headers['content-type'];
@@ -313,7 +350,13 @@ const PropisiForm = () => {
           console.error('Статус:', err.response.status);
           console.error('Заголовки:', err.response.headers);
         }
-        // Продолжаем со следующим сервером
+        
+        // Если это последний сервер, повторяем снова с первым
+        if (i === config.API_URLS.length - 1 && !success) {
+          i = -1; // Начнем снова с индекса 0
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Ждем 2 секунды перед повторной попыткой
+          setInfoMessage('Повторяем попытку с другим сервером...');
+        }
       }
     }
     
@@ -379,6 +422,80 @@ const PropisiForm = () => {
     setTimeout(() => setInfoMessage(null), 2000);
   };
 
+  // Функция для резервной генерации PDF на клиенте
+  const generateFallbackPDF = async () => {
+    setLoading(true);
+    setError(null);
+    setInfoMessage('Генерация PDF локально в браузере, пожалуйста подождите...');
+    
+    try {
+      // Динамический импорт библиотеки jsPDF только когда она нужна
+      const jsPDFModule = await import('jspdf');
+      const { jsPDF } = jsPDFModule.default;
+      
+      // Создаем новый PDF документ
+      const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({
+        orientation: orientation,
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Добавляем базовую информацию
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(16);
+      pdf.text('Пропись (аварийный режим)', 20, 20);
+      
+      pdf.setFontSize(12);
+      pdf.text(`Задание: ${formData.task}`, 20, 30);
+      
+      if (formData.student_name) {
+        pdf.text(`Ученик: ${formData.student_name}`, 20, 40);
+      }
+      
+      // Добавляем текст прописи
+      pdf.setFontSize(14);
+      
+      const lines = formData.text.split('\n');
+      let yPos = 60;
+      
+      lines.forEach(line => {
+        if (line.trim()) {
+          pdf.text(line, 20, yPos);
+          yPos += 15;
+        } else {
+          yPos += 10; // Пустая строка
+        }
+      });
+      
+      // Добавляем примечание
+      pdf.setFontSize(10);
+      pdf.text('* Создано в резервном режиме из-за проблем с сервером', 20, 280);
+      
+      // Сохраняем PDF
+      const pdfUrl = pdf.output('datauristring');
+      
+      // Показываем превью и сохраняем PDF
+      setPreviewUrl(pdfUrl);
+      setPreviewType('pdf');
+      setLastPdfUrl(pdfUrl);
+      
+      // Автоматическое скачивание
+      const downloadSuccess = downloadFile(pdfUrl, 'propisi-fallback.pdf');
+      
+      if (downloadSuccess) {
+        setInfoMessage('PDF успешно сгенерирован в браузере. Если скачивание не началось автоматически, нажмите "Скачать снова".');
+      } else {
+        setInfoMessage('PDF успешно сгенерирован в браузере, но возникла проблема при скачивании. Нажмите "Скачать снова".');
+      }
+    } catch (error) {
+      console.error('Ошибка при генерации PDF в браузере:', error);
+      setError('Не удалось создать PDF в браузере. Пожалуйста, попробуйте позже.');
+    }
+    
+    setLoading(false);
+  };
+
   // Обработчик отправки формы
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -396,29 +513,40 @@ const PropisiForm = () => {
     
     let success = false;
     let errorMessages = [];
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    // Пробуем все серверы по очереди
-    for (let i = 0; i < config.API_URLS.length; i++) {
-      const apiUrl = config.API_URLS[i];
-      setCurrentApiUrl(apiUrl);
-      setCurrentApiIndex(i);
-      
+    // Создаем axios-клиент с CORS-прокси
+    const axiosClient = axios.create({
+      responseType: 'blob',
+      headers: {
+        'Accept': 'application/pdf,image/*',
+        'Content-Type': 'multipart/form-data',
+        'Access-Control-Allow-Origin': '*',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      timeout: 90000,
+      withCredentials: false
+    });
+
+    // Отключаем трансформацию данных для CORS-прокси
+    axiosClient.defaults.transformRequest = [
+      (data, headers) => {
+        return data;
+      }
+    ];
+    
+    // Функция для работы с одним сервером с возможностью повторных попыток
+    const tryServer = async (apiUrl) => {
       try {
-        console.log(`Пробуем сервер для генерации PDF: ${apiUrl}`);
+        console.log(`Пробуем сервер для генерации PDF: ${apiUrl} (попытка ${retryCount + 1})`);
         const requestUrl = `${apiUrl}/generate-pdf`;
         
-        // Отправляем запрос с увеличенным таймаутом
-        const response = await axios.post(requestUrl, formPayload, {
-          responseType: 'blob',
-          headers: {
-            'Accept': 'application/pdf,image/*',
-            'Content-Type': 'multipart/form-data',
-            'Access-Control-Allow-Origin': '*',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          timeout: 90000, // Увеличиваем таймаут до 90 секунд
-          withCredentials: false
-        });
+        // Добавляем случайное число для обхода кэша
+        const randomParam = `?_=${Date.now()}`;
+        
+        // Отправляем запрос
+        const response = await axiosClient.post(requestUrl + randomParam, formPayload);
         
         if (response.status === 200) {
           const contentType = response.headers['content-type'];
@@ -433,34 +561,59 @@ const PropisiForm = () => {
             
             const downloadSuccess = downloadFile(url);
             
-            success = true;
             if (downloadSuccess) {
               setInfoMessage('PDF успешно сгенерирован. Если скачивание не началось автоматически, нажмите "Скачать снова".');
             } else {
               setInfoMessage('PDF успешно сгенерирован, но возникла проблема при скачивании. Нажмите "Скачать снова".');
             }
-            break;
+            return true;
           } else {
-            errorMessages.push(`Сервер ${apiUrl} вернул некорректный формат: ${contentType}`);
+            throw new Error(`Некорректный формат: ${contentType}`);
           }
         } else {
-          errorMessages.push(`Сервер ${apiUrl} вернул статус ${response.status}`);
+          throw new Error(`Сервер вернул статус ${response.status}`);
         }
       } catch (err) {
         console.error(`Ошибка на сервере ${apiUrl}:`, err.message);
-        // Полная диагностика ошибки
         if (err.response) {
           console.error('Данные ответа:', err.response.data);
           console.error('Статус:', err.response.status);
           console.error('Заголовки:', err.response.headers);
         }
-        errorMessages.push(`Сервер ${apiUrl}: ${err.message}`);
-        // Продолжаем со следующим сервером
+        errorMessages.push(`${apiUrl}: ${err.message}`);
+        return false;
+      }
+    };
+    
+    // Пробуем все серверы по очереди
+    while (!success && retryCount < maxRetries) {
+      for (let i = 0; i < config.API_URLS.length; i++) {
+        const apiUrl = config.API_URLS[i];
+        setCurrentApiUrl(apiUrl);
+        setCurrentApiIndex(i);
+        
+        success = await tryServer(apiUrl);
+        if (success) break;
+        
+        // Ждем немного перед следующей попыткой
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      if (!success) {
+        retryCount++;
+        if (retryCount < maxRetries) {
+          setInfoMessage(`Повторная попытка ${retryCount + 1} из ${maxRetries}...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
     }
     
     if (!success) {
-      setError(`Не удалось сгенерировать PDF. Проверьте интернет-соединение и попробуйте упростить задание. Детали: ${errorMessages.length > 0 ? errorMessages[0] : 'серверы недоступны'}`);
+      setError(`Не удалось сгенерировать PDF. Проверьте интернет-соединение и попробуйте упростить задание или повторите позже. Детали: ${errorMessages.length > 0 ? errorMessages[0] : 'серверы недоступны'}`);
+      // Показываем опцию резервной генерации
+      setShowFallbackOption(true);
+    } else {
+      setShowFallbackOption(false);
     }
     
     setLoading(false);
@@ -702,6 +855,18 @@ const PropisiForm = () => {
               disabled={loading || previewLoading}
             >
               Скачать снова
+            </button>
+          )}
+          
+          {/* Кнопка резервной генерации */}
+          {showFallbackOption && (
+            <button 
+              type="button"
+              className="button button-fallback"
+              onClick={generateFallbackPDF}
+              disabled={loading || previewLoading}
+            >
+              Сгенерировать локально
             </button>
           )}
         </div>

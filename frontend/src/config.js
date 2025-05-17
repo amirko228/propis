@@ -2,14 +2,14 @@
 const config = {
   // URL API бэкенда - массив резервных серверов - список отсортирован по приоритету
   API_URLS: [
-    'https://propisi-api.adaptable.app',
-    'https://propisi-backend.onrender.com',
-    'https://propisi-api-2.onrender.com',
-    'https://propisi-be.vercel.app/api',
     'https://corsproxy.io/?https://propisi-api.adaptable.app',
     'https://api.codetabs.com/v1/proxy?quest=https://propisi-api.adaptable.app',
     'https://api.allorigins.win/raw?url=https://propisi-api.adaptable.app',
     'https://cors-anywhere.herokuapp.com/https://propisi-api.adaptable.app',
+    'https://propisi-be.vercel.app/api',
+    'https://propisi-backend.onrender.com',
+    'https://propisi-api-2.onrender.com',
+    'https://propisi-api.adaptable.app',
     'http://localhost:8000'
   ],
   
