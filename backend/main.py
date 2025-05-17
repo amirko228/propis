@@ -179,44 +179,67 @@ async def generate_pdf(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Максимально упрощенная версия генерации PDF.
+    Обходное решение - возвращаем HTML вместо PDF для Vercel.
     """
     try:
-        # Создаем максимально простой PDF
-        buffer = io.BytesIO()
+        # Создаем простой HTML-шаблон для отображения текста
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Генератор прописей - {task}</title>
+            <meta charset="utf-8">
+            <style>
+                body {{ 
+                    font-family: Arial, sans-serif; 
+                    margin: 30px; 
+                    line-height: 1.6;
+                }}
+                .container {{ 
+                    border: 1px solid #ddd; 
+                    padding: 20px; 
+                    margin-bottom: 20px; 
+                    background-color: #f9f9f9;
+                }}
+                .title {{ 
+                    font-size: 24px; 
+                    margin-bottom: 20px; 
+                    color: #333;
+                }}
+                .text {{ 
+                    white-space: pre-line; 
+                    font-size: 16px; 
+                    margin-bottom: 30px;
+                }}
+                .info {{ 
+                    font-size: 12px; 
+                    color: #777; 
+                    margin-top: 30px;
+                }}
+                .red-line {{
+                    border-right: 2px solid red;
+                    padding-right: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container red-line">
+                <h1 class="title">{task}</h1>
+                <div class="text">{text}</div>
+                <div class="info">
+                    <p>Тип заполнения: {fill_type}</p>
+                    <p>Тип разметки: {page_layout}</p>
+                    <p>Тип шрифта: {font_type}</p>
+                    <p>Ориентация: {page_orientation}</p>
+                    {f"<p>Имя ученика: {student_name}</p>" if student_name else ""}
+                </div>
+            </div>
+        </body>
+        </html>
+        """
         
-        # Всегда используем портретную ориентацию для простоты
-        c = canvas.Canvas(buffer, pagesize=A4)
-        
-        # Устанавливаем очень простой шрифт
-        c.setFont("Helvetica", 12)
-        
-        # Добавляем простой текст на страницу
-        c.drawString(100, 750, "Генератор прописей")
-        c.drawString(100, 700, "Текст для прописи:")
-        
-        # Очень простой вывод текста построчно
-        y_position = 650
-        for line in text.split('\n')[:5]:  # Ограничимся первыми 5 строками
-            c.drawString(100, y_position, line[:50])  # Ограничим длину строки
-            y_position -= 20
-        
-        # Добавим основную информацию
-        c.drawString(100, 550, f"Задание: {task}")
-        
-        # Закрываем документ
-        c.showPage()
-        c.save()
-        
-        # Получаем данные из буфера
-        buffer.seek(0)
-        pdf_data = buffer.getvalue()
-        
-        # Устанавливаем простой заголовок
-        headers = {"Content-Disposition": "attachment; filename=propisi.pdf"}
-        
-        # Возвращаем PDF напрямую из памяти
-        return Response(content=pdf_data, media_type="application/pdf", headers=headers)
+        # Возвращаем HTML-страницу
+        return Response(content=html_content, media_type="text/html")
     
     except Exception as e:
         # Максимально подробно логируем ошибку
@@ -225,15 +248,29 @@ async def generate_pdf(
         print(f"ОШИБКА В GENERATE_PDF: {str(e)}")
         print(error_trace)
         
-        # Возвращаем ошибку в формате JSON для отладки на клиенте
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": str(e),
-                "traceback": error_trace,
-                "message": "Ошибка при генерации PDF"
-            }
-        )
+        # Возвращаем ошибку в формате HTML
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Ошибка генерации</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 30px; }}
+                .error {{ color: red; font-weight: bold; }}
+                .details {{ margin-top: 20px; padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; }}
+            </style>
+        </head>
+        <body>
+            <h1 class="error">Произошла ошибка при генерации страницы</h1>
+            <p>Пожалуйста, попробуйте снова или обратитесь к администратору</p>
+            <div class="details">
+                <h3>Детали ошибки (для разработчика):</h3>
+                <p>{str(e)}</p>
+            </div>
+        </body>
+        </html>
+        """
+        return Response(content=error_html, media_type="text/html", status_code=500)
 
 @app.post("/api/preview")
 async def generate_preview(
@@ -246,45 +283,81 @@ async def generate_preview(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Максимально упрощенная версия предпросмотра.
+    Обходное решение - возвращаем HTML вместо PDF для предпросмотра на Vercel.
     """
     try:
-        # Создаем максимально простой PDF
-        buffer = io.BytesIO()
+        # Ограничиваем текст только первыми тремя строками
+        preview_lines = text.split('\n')[:3]
+        preview_text = '\n'.join(preview_lines)
         
-        # Всегда используем портретную ориентацию для простоты
-        c = canvas.Canvas(buffer, pagesize=A4)
+        # Создаем простой HTML-шаблон для предпросмотра
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Предпросмотр - {task}</title>
+            <meta charset="utf-8">
+            <style>
+                body {{ 
+                    font-family: Arial, sans-serif; 
+                    margin: 30px; 
+                    line-height: 1.6;
+                }}
+                .container {{ 
+                    border: 1px solid #ddd; 
+                    padding: 20px; 
+                    margin-bottom: 20px; 
+                    background-color: #f9f9f9;
+                }}
+                .title {{ 
+                    font-size: 24px; 
+                    margin-bottom: 20px; 
+                    color: #333;
+                }}
+                .text {{ 
+                    white-space: pre-line; 
+                    font-size: 16px; 
+                    margin-bottom: 30px;
+                }}
+                .info {{ 
+                    font-size: 12px; 
+                    color: #777; 
+                    margin-top: 30px;
+                }}
+                .preview-notice {{
+                    background-color: #fff3cd;
+                    padding: 10px;
+                    border: 1px solid #ffeeba;
+                    color: #856404;
+                    margin-top: 20px;
+                }}
+                .red-line {{
+                    border-right: 2px solid red;
+                    padding-right: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container red-line">
+                <h1 class="title">Предпросмотр: {task}</h1>
+                <div class="text">{preview_text}</div>
+                <div class="preview-notice">
+                    Это только предварительный просмотр. Полный документ может отличаться.
+                </div>
+                <div class="info">
+                    <p>Тип заполнения: {fill_type}</p>
+                    <p>Тип разметки: {page_layout}</p>
+                    <p>Тип шрифта: {font_type}</p>
+                    <p>Ориентация: {page_orientation}</p>
+                    {f"<p>Имя ученика: {student_name}</p>" if student_name else ""}
+                </div>
+            </div>
+        </body>
+        </html>
+        """
         
-        # Устанавливаем очень простой шрифт
-        c.setFont("Helvetica", 12)
-        
-        # Добавляем простой текст на страницу
-        c.drawString(100, 750, "ПРЕДПРОСМОТР - Генератор прописей")
-        c.drawString(100, 700, "Предпросмотр текста:")
-        
-        # Очень простой вывод текста построчно
-        y_position = 650
-        for line in text.split('\n')[:2]:  # Ограничимся первыми 2 строками
-            c.drawString(100, y_position, line[:30])  # Ограничим длину строки
-            y_position -= 20
-        
-        # Добавим основную информацию
-        c.drawString(100, 600, f"Задание: {task}")
-        c.drawString(100, 580, "Это только предпросмотр")
-        
-        # Закрываем документ
-        c.showPage()
-        c.save()
-        
-        # Получаем данные из буфера
-        buffer.seek(0)
-        pdf_data = buffer.getvalue()
-        
-        # Устанавливаем заголовок для предпросмотра
-        headers = {"Content-Disposition": "inline; filename=preview.pdf"}
-        
-        # Возвращаем PDF напрямую из памяти
-        return Response(content=pdf_data, media_type="application/pdf", headers=headers)
+        # Возвращаем HTML-страницу вместо PDF
+        return Response(content=html_content, media_type="text/html")
     
     except Exception as e:
         # Максимально подробно логируем ошибку
@@ -293,15 +366,29 @@ async def generate_preview(
         print(f"ОШИБКА В PREVIEW: {str(e)}")
         print(error_trace)
         
-        # Возвращаем ошибку в формате JSON для отладки на клиенте
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": str(e),
-                "traceback": error_trace,
-                "message": "Ошибка при генерации предпросмотра"
-            }
-        )
+        # Возвращаем ошибку в формате HTML
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Ошибка предпросмотра</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 30px; }}
+                .error {{ color: red; font-weight: bold; }}
+                .details {{ margin-top: 20px; padding: 10px; background-color: #f8f8f8; border: 1px solid #ddd; }}
+            </style>
+        </head>
+        <body>
+            <h1 class="error">Произошла ошибка при создании предпросмотра</h1>
+            <p>Пожалуйста, попробуйте снова или обратитесь к администратору</p>
+            <div class="details">
+                <h3>Детали ошибки (для разработчика):</h3>
+                <p>{str(e)}</p>
+            </div>
+        </body>
+        </html>
+        """
+        return Response(content=error_html, media_type="text/html", status_code=500)
 
 @app.get("/api")
 async def root():
