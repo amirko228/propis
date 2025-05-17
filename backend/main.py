@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -54,7 +54,7 @@ if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
 else:
     temp_dir = "temp"
-    os.makedirs(temp_dir, exist_ok=True)
+os.makedirs(temp_dir, exist_ok=True)
 
 # Регистрируем шрифты - отключаем пользовательские шрифты
 FONT_LOADED = False
@@ -178,42 +178,62 @@ async def generate_pdf(
     page_orientation: Annotated[str, Form()],
     student_name: Annotated[Union[str, None], Form()] = None
 ):
+    """
+    Максимально упрощенная версия генерации PDF.
+    """
     try:
-        # Создаем минимальный PDF без сложной логики
-        # Определяем размер страницы A4
-        page_width, page_height = 595.27, 841.89  # A4 в точках
-        
-        # Создаем PDF в памяти напрямую через библиотеку
+        # Создаем максимально простой PDF
         buffer = io.BytesIO()
-        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
-        # Устанавливаем шрифт - используем только встроенный
-        p.setFont("Helvetica", 12)
+        # Всегда используем портретную ориентацию для простоты
+        c = canvas.Canvas(buffer, pagesize=A4)
         
-        # Простой текст
-        p.drawString(72, 800, "Тестовый PDF документ")
-        p.drawString(72, 780, "Прописи")
+        # Устанавливаем очень простой шрифт
+        c.setFont("Helvetica", 12)
         
-        # Сохраняем PDF
-        p.save()
+        # Добавляем простой текст на страницу
+        c.drawString(100, 750, "Генератор прописей")
+        c.drawString(100, 700, "Текст для прописи:")
+        
+        # Очень простой вывод текста построчно
+        y_position = 650
+        for line in text.split('\n')[:5]:  # Ограничимся первыми 5 строками
+            c.drawString(100, y_position, line[:50])  # Ограничим длину строки
+            y_position -= 20
+        
+        # Добавим основную информацию
+        c.drawString(100, 550, f"Задание: {task}")
+        
+        # Закрываем документ
+        c.showPage()
+        c.save()
         
         # Получаем данные из буфера
         buffer.seek(0)
+        pdf_data = buffer.getvalue()
+        
+        # Устанавливаем простой заголовок
+        headers = {"Content-Disposition": "attachment; filename=propisi.pdf"}
         
         # Возвращаем PDF напрямую из памяти
-        return Response(
-            content=buffer.getvalue(), 
-            media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=propisi.pdf"}
-        )
-        
+        return Response(content=pdf_data, media_type="application/pdf", headers=headers)
+    
     except Exception as e:
-        # Логируем ошибку
+        # Максимально подробно логируем ошибку
         import traceback
-        error_details = traceback.format_exc()
-        print(f"Ошибка при генерации PDF: {e}")
-        print(error_details)
-        raise HTTPException(status_code=500, detail=f"Ошибка при генерации PDF: {str(e)}")
+        error_trace = traceback.format_exc()
+        print(f"ОШИБКА В GENERATE_PDF: {str(e)}")
+        print(error_trace)
+        
+        # Возвращаем ошибку в формате JSON для отладки на клиенте
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "traceback": error_trace,
+                "message": "Ошибка при генерации PDF"
+            }
+        )
 
 @app.post("/api/preview")
 async def generate_preview(
@@ -226,44 +246,62 @@ async def generate_preview(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     """
-    Генерирует предварительный просмотр страницы прописи в формате PDF
+    Максимально упрощенная версия предпросмотра.
     """
     try:
-        # Создаем минимальный PDF без сложной логики
-        # Определяем размер страницы A4
-        page_width, page_height = 595.27, 841.89  # A4 в точках
-        
-        # Создаем PDF в памяти напрямую через библиотеку
+        # Создаем максимально простой PDF
         buffer = io.BytesIO()
-        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
         
-        # Устанавливаем шрифт - используем только встроенный
-        p.setFont("Helvetica", 12)
+        # Всегда используем портретную ориентацию для простоты
+        c = canvas.Canvas(buffer, pagesize=A4)
         
-        # Простой текст
-        p.drawString(72, 800, "Предпросмотр PDF документа")
-        p.drawString(72, 780, "Прописи")
+        # Устанавливаем очень простой шрифт
+        c.setFont("Helvetica", 12)
         
-        # Сохраняем PDF
-        p.save()
+        # Добавляем простой текст на страницу
+        c.drawString(100, 750, "ПРЕДПРОСМОТР - Генератор прописей")
+        c.drawString(100, 700, "Предпросмотр текста:")
+        
+        # Очень простой вывод текста построчно
+        y_position = 650
+        for line in text.split('\n')[:2]:  # Ограничимся первыми 2 строками
+            c.drawString(100, y_position, line[:30])  # Ограничим длину строки
+            y_position -= 20
+        
+        # Добавим основную информацию
+        c.drawString(100, 600, f"Задание: {task}")
+        c.drawString(100, 580, "Это только предпросмотр")
+        
+        # Закрываем документ
+        c.showPage()
+        c.save()
         
         # Получаем данные из буфера
         buffer.seek(0)
+        pdf_data = buffer.getvalue()
+        
+        # Устанавливаем заголовок для предпросмотра
+        headers = {"Content-Disposition": "inline; filename=preview.pdf"}
         
         # Возвращаем PDF напрямую из памяти
-        return Response(
-            content=buffer.getvalue(),
-            media_type="application/pdf", 
-            headers={"Content-Disposition": "inline; filename=preview.pdf"}
-        )
-        
+        return Response(content=pdf_data, media_type="application/pdf", headers=headers)
+    
     except Exception as e:
-        # Логируем ошибку
+        # Максимально подробно логируем ошибку
         import traceback
-        error_details = traceback.format_exc()
-        print(f"Ошибка при генерации предпросмотра: {e}")
-        print(error_details)
-        raise HTTPException(status_code=500, detail=f"Ошибка при генерации предпросмотра: {str(e)}")
+        error_trace = traceback.format_exc()
+        print(f"ОШИБКА В PREVIEW: {str(e)}")
+        print(error_trace)
+        
+        # Возвращаем ошибку в формате JSON для отладки на клиенте
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "traceback": error_trace,
+                "message": "Ошибка при генерации предпросмотра"
+            }
+        )
 
 @app.get("/api")
 async def root():
