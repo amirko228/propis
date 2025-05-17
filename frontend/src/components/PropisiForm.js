@@ -25,7 +25,6 @@ const PropisiForm = () => {
 
   // Состояние для предпросмотра
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [numPages, setNumPages] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -117,11 +116,6 @@ const PropisiForm = () => {
       setError("Произошла ошибка при генерации предпросмотра. Пожалуйста, попробуйте еще раз.");
       setIsLoading(false);
     }
-  };
-
-  // Обработчик загрузки PDF для предпросмотра
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
   };
 
   // Опции для формы выбора
@@ -301,13 +295,13 @@ const PropisiForm = () => {
             <div className="pdf-preview">
               <Document
                 file={previewUrl}
-                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadSuccess={({ numPages }) => console.log(`PDF загружен, страниц: ${numPages}`)}
                 className="pdf-document"
               >
                 <Page pageNumber={1} width={300} className="pdf-page" />
               </Document>
               <p className="preview-info">
-                Страница 1 {numPages && `из ${numPages}`}
+                Страница 1
               </p>
             </div>
           ) : (
