@@ -20,12 +20,17 @@ from reportlab.graphics import renderPDF
 from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
-from cors_middleware import setup_cors
 
 app = FastAPI(title="Генератор прописей")
 
-# Настройка CORS с помощью нашего модуля
-setup_cors(app)
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # В продакшене заменить на конкретные домены
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Модель данных для запроса
 class PropisiRequest(BaseModel):
@@ -38,8 +43,12 @@ class PropisiRequest(BaseModel):
     student_name: Optional[str] = None
 
 # Создаем папку для временных файлов
-temp_dir = "temp"
-os.makedirs(temp_dir, exist_ok=True)
+# На Vercel используем /tmp директорию, которая доступна для serverless функций
+if os.environ.get('VERCEL', False):
+    temp_dir = "/tmp"
+else:
+    temp_dir = "temp"
+    os.makedirs(temp_dir, exist_ok=True)
 
 # Регистрируем шрифты
 FONT_LOADED = False
@@ -47,6 +56,12 @@ try:
     # Получаем абсолютный путь к текущему файлу
     current_dir = os.path.dirname(os.path.abspath(__file__))
     fonts_dir = os.path.join(current_dir, "fonts")
+    
+    # В режиме Vercel проверяем специальный путь для шрифтов
+    if os.environ.get('VERCEL', False) and not os.path.exists(fonts_dir):
+        # Пробуем найти шрифты в другой директории на Vercel
+        vercel_dir = os.path.dirname(os.path.dirname(current_dir))
+        fonts_dir = os.path.join(vercel_dir, "backend", "fonts")
     
     print(f"Директория со шрифтами: {fonts_dir}")
     
@@ -60,10 +75,6 @@ try:
     
     # Пробуем сначала ilyukhina.ttf
     ilyukhina_path = os.path.join(fonts_dir, "ilyukhina.ttf")
-    print(f"Проверяем путь: {ilyukhina_path}")
-    print(f"Файл существует: {os.path.exists(ilyukhina_path)}")
-    print(f"Размер файла: {os.path.getsize(ilyukhina_path) if os.path.exists(ilyukhina_path) else 'файл не существует'}")
-    
     if os.path.exists(ilyukhina_path) and os.path.getsize(ilyukhina_path) > 0:
         print("Регистрируем шрифт ilyukhina.ttf")
         pdfmetrics.registerFont(TTFont('Propisi', ilyukhina_path))
@@ -72,10 +83,6 @@ try:
     else:
         # Если нет, пробуем propisi.ttf
         propisi_path = os.path.join(fonts_dir, "propisi.ttf")
-        print(f"Проверяем путь: {propisi_path}")
-        print(f"Файл существует: {os.path.exists(propisi_path)}")
-        print(f"Размер файла: {os.path.getsize(propisi_path) if os.path.exists(propisi_path) else 'файл не существует'}")
-        
         if os.path.exists(propisi_path) and os.path.getsize(propisi_path) > 0:
             print("Регистрируем шрифт propisi.ttf")
             pdfmetrics.registerFont(TTFont('Propisi', propisi_path))
@@ -189,7 +196,7 @@ def draw_propisi_lines(c, x, y, width, line_height, count, oblique=False):
             if offset % 2 == 0:  # Рисуем через одну линию для оптимизации
                 c.line(start_x, start_y, end_x, end_y)
 
-@app.post("/generate-pdf")
+@app.post("/api/generate-pdf")
 async def generate_pdf(
     task: Annotated[str, Form()],
     fill_type: Annotated[str, Form()],
@@ -463,7 +470,7 @@ async def generate_pdf(
         filename="propisi.pdf"
     )
 
-@app.post("/preview")
+@app.post("/api/preview")
 async def generate_preview(
     task: Annotated[str, Form()],
     fill_type: Annotated[str, Form()],
@@ -776,7 +783,7 @@ async def generate_preview(
         filename="preview.pdf"
     )
 
-@app.get("/")
+@app.get("/api")
 async def root():
     return {"message": "Генератор прописей API работает!"}
 

@@ -1,22 +1,7 @@
 // Конфигурация приложения
 const config = {
-  // URL API бэкенда - массив резервных серверов - список отсортирован по приоритету
-  API_URLS: [
-    'https://corsproxy.io/?https://propisi-api.adaptable.app',
-    'https://api.codetabs.com/v1/proxy?quest=https://propisi-api.adaptable.app',
-    'https://api.allorigins.win/raw?url=https://propisi-api.adaptable.app',
-    'https://cors-anywhere.herokuapp.com/https://propisi-api.adaptable.app',
-    'https://propisi-be.vercel.app/api',
-    'https://propisi-backend.onrender.com',
-    'https://propisi-api-2.onrender.com',
-    'https://propisi-api.adaptable.app',
-    'http://localhost:8000'
-  ],
-  
-  // URL API для использования по умолчанию
-  API_URL: process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:8000' 
-    : 'https://propisi-api.adaptable.app',
+  // URL API бэкенда
+  API_URL: process.env.REACT_APP_API_URL || 'https://propisi-backend.vercel.app',
   
   // Названия вариантов заполнения
   FILL_TYPES: {
@@ -45,9 +30,5 @@ const config = {
     landscape: 'Альбомная'
   }
 };
-
-// Логгирование используемого API URL для отладки
-console.log('Используется API URL:', config.API_URL);
-console.log('Среда выполнения:', process.env.NODE_ENV || 'development');
 
 export default config; 

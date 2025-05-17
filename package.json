@@ -7,10 +7,8 @@
     "start:frontend": "cd frontend && npm start",
     "install:backend": "cd backend && pip install --upgrade pip && pip install -r requirements.txt",
     "install:frontend": "cd frontend && npm install",
-    "install": "npm run install:frontend",
-    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "build": "cd frontend && npm run build",
-    "vercel-build": "cd frontend && npm install && npm run build"
+    "install": "npm run install:frontend && npm run install:backend",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\""
   },
   "dependencies": {
     "concurrently": "^8.2.2"
