@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -179,17 +179,7 @@ async def generate_pdf(
     student_name: Annotated[Union[str, None], Form()] = None
 ):
     try:
-        # Логируем полученные параметры
-        print(f"Получены параметры для генерации PDF:")
-        print(f"- task: {task}")
-        print(f"- fill_type: {fill_type}")
-        print(f"- page_layout: {page_layout}")
-        print(f"- font_type: {font_type}")
-        print(f"- page_orientation: {page_orientation}")
-        print(f"- student_name: {student_name}")
-        print(f"- text length: {len(text)} символов")
-        
-        # Создаем PDF сразу в памяти без записи на диск
+        # Упрощенная версия генерации PDF
         # Определяем ориентацию страницы
         page_size = landscape(A4) if page_orientation == "landscape" else A4
         
@@ -198,235 +188,42 @@ async def generate_pdf(
         c = canvas.Canvas(buffer, pagesize=page_size)
         
         # Минимальные отступы страницы 
-        margin_left = 2
-        margin_right = 2
-        margin_top = 2
-        margin_bottom = 2
-        
-        # Определяем параметры разметки страницы
-        content_width = page_size[0] - margin_left - margin_right
-        content_height = page_size[1] - margin_top - margin_bottom
-        
-        # Рисуем линии или клетки в зависимости от выбранного шаблона
-        y_start = page_size[1] - margin_top
+        margin_left = 20
+        margin_right = 20
+        margin_top = 30
+        margin_bottom = 30
         
         # Разбиваем текст на строки
         lines = text.strip().split('\n')
         if not lines:
-            lines = [""]
+            lines = ["Пример текста"]
         
-        # Обрабатываем варианты заполнения
-        processed_lines = []
+        # Используем стандартный шрифт и размер
+        c.setFont("Helvetica", 14)
         
-        if fill_type == "all":
-            # Все строки без изменений
-            processed_lines = lines
-        elif fill_type == "first_letter":
-            # Размножаем первую букву в каждой строке
-            for line in lines:
-                if line:
-                    first_char = line[0]
-                    processed_lines.append(first_char * 30)  # Размножаем букву на строку
-                else:
-                    processed_lines.append("")
-        elif fill_type == "one_line":
-            # Размножаем первую строку на весь лист
-            if lines[0]:
-                first_line = lines[0]
-                processed_lines = [first_line] * 10  # 10 строк с одинаковым текстом
-            else:
-                processed_lines = [""] * 10
-        else:
-            # Неизвестный тип заполнения, используем default
-            processed_lines = lines
+        # Простой вывод текста на страницу
+        y = page_size[1] - margin_top
+        line_height = 20
         
-        # Ограничиваем количество строк для отображения
-        max_lines = min(10, len(processed_lines))
+        # Заголовок
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margin_left, y, task)
+        y -= line_height * 2
         
-        # Используем всю доступную ширину для содержимого
-        content_start_x = margin_left
-        content_usable_width = content_width
+        # Устанавливаем обычный шрифт
+        c.setFont("Helvetica", 14)
         
-        # Определяем параметры отрисовки в зависимости от типа разметки
-        if page_layout == "cells":
-            # Для клеточек
-            cell_size = 25  # Размер клетки в пунктах
-            
-            # Рассчитываем количество строк и столбцов для заполнения всей страницы
-            rows = int(content_height / cell_size) + 1  # +1 для гарантии заполнения
-            cols = int(content_usable_width / cell_size)
-            
-            # Рисуем школьные клетки с стандартными настройками на всю страницу
-            draw_school_grid(c, content_start_x, y_start, cell_size, rows, cols)
-            
-            # Расстояние между буквами для клеток - используем размер клетки
-            char_width = cell_size
-            char_offset_y = cell_size * 0.5  # Точно центрируем символы в клетке по вертикали
-            line_height = cell_size
-            line_gap = 0
-            
-            # Размер шрифта для клеток
-            cell_font_size = 20  # Размер немного меньше клетки для лучшего визуального восприятия
-        else:
-            # Для линейки параметры
-            line_height = 14  # Высота между линиями
-            line_gap = 0  # Полностью убираем отступы
-            
-            # Рисуем линейки для прописей на всю ширину страницы
-            # Сначала горизонтальные линии для всех типов линеек
-            c.setDash([])  # Сплошная линия для разметки
-            c.setLineWidth(0.3)
-            
-            # Разные оттенки серого для линий
-            light_gray = Color(0.85, 0.85, 0.85)  # Верхняя и нижняя линии
-            dark_gray = Color(0.6, 0.6, 0.6)      # Основная (средняя) линия
-            
-            # Рассчитываем количество групп линий на странице
-            group_height = line_height * 2  # Высота группы из трех линий
-            total_groups = int(content_height / group_height) + 2  # +2 для запаса
-            
-            # Рисуем горизонтальные линии
-            for i in range(total_groups):
-                base_y = y_start - i * group_height
-                
-                # Пропускаем, если вышли за пределы страницы
-                if base_y - line_height < 0:
-                    continue
-                    
-                # Средняя линия (темнее)
-                c.setStrokeColor(dark_gray)
-                c.line(content_start_x, base_y, content_start_x + content_usable_width, base_y)
-                
-                # Верхняя линия (светлее)
-                c.setStrokeColor(light_gray)
-                c.line(content_start_x, base_y + line_height, 
-                      content_start_x + content_usable_width, base_y + line_height)
-                
-                # Нижняя линия (светлее)
-                c.line(content_start_x, base_y - line_height,
-                      content_start_x + content_usable_width, base_y - line_height)
-            
-            # Если нужны косые линии, добавляем их
-            if page_layout == "lines_oblique":
-                # Настройки для косых линий
-                c.setStrokeColor(Color(0.8, 0.8, 0.8))  # Светло-серый цвет
-                c.setLineWidth(0.25)  # Тонкие линии
-                
-                # Угол наклона: положительный угол для наклона влево-вниз (как на первом скрине)
-                angle = 58  # градусов
-                
-                # Шаг между линиями
-                step = 18  # пикселей, делаем линии более редкими как на первом скрине
-                
-                # Вычисляем расстояние, необходимое для пересечения страницы
-                page_width = page_size[0]
-                page_height = page_size[1]
-                
-                # Вычисляем дельту X для заданного угла наклона
-                delta_x = page_height / math.tan(math.radians(abs(angle)))
-                
-                # Рисуем линии с отрицательным отступом для гарантии покрытия всей страницы
-                start_x = -delta_x
-                while start_x < page_width + delta_x:
-                    # Рисуем линию от верхнего края до нижнего
-                    if angle < 0:  # Наклон вправо
-                        c.line(start_x, page_height, start_x + delta_x, 0)
-                    else:  # Наклон влево (как на первом скрине)
-                        c.line(start_x, page_height, start_x - delta_x, 0)
-                    
-                    # Смещаем начало для следующей линии
-                    start_x += step
-            
-            # Расстояние между буквами для линейки - адаптируем на основе высоты линий
-            char_width = line_height * 1.5  # Адаптивная ширина букв
-            char_offset_y = 0  # Для линеек выравниваем по базовой линии
-            
-            # Размер шрифта для линеек
-            line_font_size = 24  # Чуть больше для линеек
+        # Печать текста построчно
+        for line in lines:
+            if y > margin_bottom:
+                c.drawString(margin_left, y, line)
+                y -= line_height
         
-        # Добавляем текст с учетом типа разметки
-        for i in range(max_lines):
-            if page_layout == "cells":
-                # Позиция для текста в клетках - центрируем по ячейке
-                base_y = y_start - i * cell_size - char_offset_y
-            else:
-                # Позиция для текста в линейке (основная линия)
-                group_height = line_height * 2  # Общая высота группы из трех линий
-                line_gap = 0  # Полностью убираем отступы
-                base_y = y_start - i * (group_height + line_gap)  # Точно по средней линии
-            
-            # Добавляем текст, если есть
-            if i < len(processed_lines) and processed_lines[i]:
-                print(f"Добавляем строку {i+1}, длина: {len(processed_lines[i])}")
-                # Используем гарантированно работающий стандартный шрифт
-                font_size = 20 if page_layout == "cells" else 28  # Увеличиваем размер шрифта для линеек
-                c.setFont("Helvetica", font_size)
-                
-                # Применение стилей для букв
-                for j, char in enumerate(processed_lines[i]):
-                    # Расположение символа с учетом типа разметки
-                    if page_layout == "cells":
-                        # Для клеток - центрируем каждую букву в своей клетке
-                        x = content_start_x + j * cell_size + cell_size/2 - font_size/3
-                        this_base_y = base_y
-                        
-                        # Смещения для визуального центрирования в клетке
-                        if char.isupper():
-                            this_base_y += cell_size * 0.05  # Слегка вверх
-                        elif char.islower():
-                            this_base_y -= cell_size * 0.05  # Слегка вниз
-                    else:
-                        # Для линеек - размещаем буквы так, чтобы каждая занимала ровно одну секцию
-                        # Рассчитываем ширину одной секции между линиями
-                        section_width = line_height * 2  # Ширина одной секции (равна высоте между линиями)
-                        
-                        # Позиционируем каждую букву точно в своей клетке/секции
-                        x = content_start_x + j * section_width + section_width * 0.3
-                        
-                        # Позиционирование по вертикали зависит от типа буквы
-                        if char.isupper():  # Заглавные буквы
-                            # Заглавные буквы опираются на нижнюю линию и достигают верхней
-                            this_base_y = base_y - line_height * 0.1  # Чуть выше средней линии
-                        else:  # Строчные буквы
-                            # Строчные буквы размещаем между средней и нижней линией
-                            this_base_y = base_y - line_height * 0.7  # Ближе к нижней линии
-                    
-                    # Проверка на выход за границы страницы
-                    if x < content_start_x + content_usable_width - (cell_size if page_layout == "cells" else char_width):
-                        # Применяем выбранный стиль шрифта
-                        if font_type == "punktir":
-                            # Для пунктирного шрифта - имитируем пунктирный контур
-                            c.saveState()
-                            
-                            if page_layout == "cells":
-                                # Для клеток - используем светло-серую заливку
-                                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый
-                                c.drawString(x, this_base_y, char)
-                            else:
-                                # Для линеек - используем тот же подход
-                                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый
-                                c.drawString(x, this_base_y, char)
-                            
-                            c.restoreState()
-                        elif font_type == "gray":
-                            # Очень светлый серый цвет для букв
-                            c.setFillColor(Color(0.6, 0.6, 0.6))
-                            c.drawString(x, this_base_y, char)
-                        else:  # "black"
-                            # Черный цвет для букв
-                            c.setFillColor(black)
-                            c.drawString(x, this_base_y, char)
-        
-        # Добавляем красную линию по правой стороне как в тетради
+        # Рисуем красную линию справа
         c.setStrokeColor(red)
-        c.setDash([])  # Сплошная линия
-        c.setLineWidth(1.0)  # Устанавливаем толщину красной линии
-        
-        # Позиция красной полосы - точно по правому краю
-        red_line_x = page_size[0] - 2  # Близко к правому краю
-        red_line_top = page_size[1] - 1  # Почти до верха страницы
-        red_line_bottom = 1  # Почти до низа страницы
-        c.line(red_line_x, red_line_top, red_line_x, red_line_bottom)
+        c.setLineWidth(1.0)
+        red_line_x = page_size[0] - margin_right
+        c.line(red_line_x, page_size[1] - margin_top, red_line_x, margin_bottom)
         
         # Сохраняем PDF
         c.save()
@@ -435,25 +232,16 @@ async def generate_pdf(
         buffer.seek(0)
         pdf_data = buffer.getvalue()
         
-        # Проверяем размер созданного PDF
-        file_size = len(pdf_data)
-        print(f"Размер PDF файла в памяти: {file_size} байт")
-        
-        if file_size == 0:
-            raise HTTPException(status_code=500, detail="Создан пустой PDF файл")
-        
         # Возвращаем PDF напрямую из памяти
-        from fastapi.responses import Response
         return Response(
             content=pdf_data, 
             media_type="application/pdf",
             headers={"Content-Disposition": "attachment; filename=propisi.pdf"}
         )
     except Exception as e:
-        # Логируем ошибку и возвращаем детальную информацию
         import traceback
         error_details = traceback.format_exc()
-        print(f"Общая ошибка при генерации PDF: {e}")
+        print(f"Ошибка при генерации PDF: {e}")
         print(error_details)
         raise HTTPException(status_code=500, detail=f"Ошибка при генерации PDF: {str(e)}")
 
@@ -471,260 +259,59 @@ async def generate_preview(
     Генерирует предварительный просмотр страницы прописи в формате PDF
     """
     try:
-        # Логируем полученные параметры
-        print(f"Получены параметры для предпросмотра:")
-        print(f"- task: {task}")
-        print(f"- fill_type: {fill_type}")
-        print(f"- page_layout: {page_layout}")
-        print(f"- font_type: {font_type}")
-        print(f"- page_orientation: {page_orientation}")
-        print(f"- student_name: {student_name}")
-        print(f"- text length: {len(text)} символов")
-        
-        # Создаем PDF сразу в памяти
-        print("Создаем PDF в памяти для предпросмотра")
-    
+        # Упрощенная версия предварительного просмотра
         # Определяем ориентацию страницы
         page_size = landscape(A4) if page_orientation == "landscape" else A4
-    
+        
         # Создаем PDF в памяти
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=page_size)
-    
+        
         # Минимальные отступы страницы 
-        margin_left = 2
-        margin_right = 2
-        margin_top = 2
-        margin_bottom = 2
-    
-        # Определяем параметры разметки страницы
-        content_width = page_size[0] - margin_left - margin_right
-        content_height = page_size[1] - margin_top - margin_bottom
+        margin_left = 20
+        margin_right = 20
+        margin_top = 30
+        margin_bottom = 30
         
-        # Рисуем линии или клетки в зависимости от выбранного шаблона
-        y_start = page_size[1] - margin_top
-        
-        # Обрабатываем только первые 2-3 строки для предпросмотра
+        # Разбиваем текст на строки и ограничиваем первыми тремя
         lines = text.strip().split('\n')
         if not lines:
-            lines = [""]
+            lines = ["Пример текста для предпросмотра"]
         
-        # Обрезаем текст до первых 3 строк для предпросмотра
+        # Берем только первые 3 строки для предпросмотра
         lines = lines[:min(3, len(lines))]
         
-        # Обрабатываем варианты заполнения
-        processed_lines = []
+        # Используем стандартный шрифт и размер
+        c.setFont("Helvetica", 14)
         
-        if fill_type == "all":
-            # Все строки без изменений
-            processed_lines = lines
-        elif fill_type == "first_letter":
-            # Размножаем первую букву в каждой строке
-            for line in lines:
-                if line:
-                    first_char = line[0]
-                    processed_lines.append(first_char * 10)  # Меньше букв для предпросмотра
-                else:
-                    processed_lines.append("")
-        elif fill_type == "one_line":
-            # Размножаем первую строку на весь предпросмотр
-            if lines[0]:
-                first_line = lines[0]
-                processed_lines = [first_line] * min(3, len(lines))
-            else:
-                processed_lines = [""] * min(3, len(lines))
-        else:
-            # Неизвестный тип заполнения, используем default
-            processed_lines = lines
+        # Простой вывод текста на страницу
+        y = page_size[1] - margin_top
+        line_height = 20
         
-        # Ограничиваем количество строк для отображения
-        max_lines = len(processed_lines)
+        # Заголовок
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(margin_left, y, f"Предпросмотр: {task}")
+        y -= line_height * 2
         
-        # Используем всю доступную ширину для содержимого
-        content_start_x = margin_left
-        content_usable_width = content_width
+        # Устанавливаем обычный шрифт
+        c.setFont("Helvetica", 14)
         
-        # Определяем параметры отрисовки в зависимости от типа разметки
-        if page_layout == "cells":
-            # Для клеточек
-            cell_size = 25  # Размер клетки в пунктах
-            
-            # Рассчитываем количество строк и столбцов для заполнения всей страницы
-            rows = min(10, int(content_height / cell_size) + 1)  # Ограничиваем для предпросмотра
-            cols = int(content_usable_width / cell_size)
-            
-            # Рисуем школьные клетки с стандартными настройками на всю страницу
-            draw_school_grid(c, content_start_x, y_start, cell_size, rows, cols)
-            
-            # Расстояние между буквами для клеток - используем размер клетки
-            char_width = cell_size
-            char_offset_y = cell_size * 0.5  # Точно центрируем символы в клетке по вертикали
-            line_height = cell_size
-            line_gap = 0
-            
-            # Размер шрифта для клеток
-            cell_font_size = 20  # Размер немного меньше клетки для лучшего визуального восприятия
-        else:
-            # Для линейки параметры
-            line_height = 14  # Высота между линиями
-            line_gap = 0  # Полностью убираем отступы
-            
-            # Рисуем линейки для прописей на всю ширину страницы
-            # Сначала горизонтальные линии для всех типов линеек
-            c.setDash([])  # Сплошная линия для разметки
-            c.setLineWidth(0.3)
-            
-            # Разные оттенки серого для линий
-            light_gray = Color(0.85, 0.85, 0.85)  # Верхняя и нижняя линии
-            dark_gray = Color(0.6, 0.6, 0.6)      # Основная (средняя) линия
-            
-            # Рассчитываем количество групп линий на странице
-            group_height = line_height * 2  # Высота группы из трех линий
-            total_groups = min(6, int(content_height / group_height) + 1)
-            
-            # Рисуем горизонтальные линии
-            for i in range(total_groups):
-                base_y = y_start - i * group_height
-                
-                # Пропускаем, если вышли за пределы страницы
-                if base_y - line_height < 0:
-                    continue
-                    
-                # Средняя линия (темнее)
-                c.setStrokeColor(dark_gray)
-                c.line(content_start_x, base_y, content_start_x + content_usable_width, base_y)
-                
-                # Верхняя линия (светлее)
-                c.setStrokeColor(light_gray)
-                c.line(content_start_x, base_y + line_height, 
-                      content_start_x + content_usable_width, base_y + line_height)
-                
-                # Нижняя линия (светлее)
-                c.line(content_start_x, base_y - line_height,
-                      content_start_x + content_usable_width, base_y - line_height)
-            
-            # Если нужны косые линии, добавляем их
-            if page_layout == "lines_oblique":
-                # Настройки для косых линий
-                c.setStrokeColor(Color(0.8, 0.8, 0.8))  # Светло-серый цвет
-                c.setLineWidth(0.25)  # Тонкие линии
-                
-                # Угол наклона: положительный угол для наклона влево-вниз (как на первом скрине)
-                angle = 58  # градусов
-                
-                # Шаг между линиями
-                step = 18  # пикселей, делаем линии более редкими 
-                
-                # Вычисляем расстояние, необходимое для пересечения страницы
-                page_width = page_size[0]
-                page_height = page_size[1]
-                
-                # Вычисляем дельту X для заданного угла наклона
-                delta_x = page_height / math.tan(math.radians(abs(angle)))
-                
-                # Рисуем линии с отрицательным отступом для гарантии покрытия всей страницы
-                start_x = -delta_x
-                while start_x < page_width + delta_x:
-                    # Рисуем линию от верхнего края до нижнего
-                    if angle < 0:  # Наклон вправо
-                        c.line(start_x, page_height, start_x + delta_x, 0)
-                    else:  # Наклон влево (как на первом скрине)
-                        c.line(start_x, page_height, start_x - delta_x, 0)
-                    
-                    # Смещаем начало для следующей линии
-                    start_x += step
+        # Печать текста построчно
+        for line in lines:
+            if y > margin_bottom:
+                c.drawString(margin_left, y, line)
+                y -= line_height
         
-            # Расстояние между буквами для линейки - адаптируем на основе высоты линий
-            char_width = line_height * 1.5  # Адаптивная ширина букв
-            char_offset_y = 0  # Для линеек выравниваем по базовой линии
-            
-            # Размер шрифта для линеек
-            line_font_size = 28  # Увеличиваем размер шрифта для линеек
+        # Текст "Это предпросмотр"
+        y = margin_bottom + 20
+        c.setFont("Helvetica-Italic", 10)
+        c.drawString(margin_left, y, "Это предварительный просмотр. Полный документ может отличаться.")
         
-        # Добавляем текст с учетом типа разметки
-        for i in range(max_lines):
-            if page_layout == "cells":
-                # Позиция для текста в клетках - центрируем по ячейке
-                base_y = y_start - i * cell_size - char_offset_y
-            else:
-                # Позиция для текста в линейке (основная линия)
-                group_height = line_height * 2  # Общая высота группы из трех линий
-                line_gap = 0  # Полностью убираем отступы
-                base_y = y_start - i * (group_height + line_gap)  # Точно по средней линии
-            
-            # Добавляем текст, если есть
-            if i < len(processed_lines) and processed_lines[i]:
-                print(f"Добавляем строку {i+1} для предпросмотра, длина: {len(processed_lines[i])}")
-                # Используем гарантированно работающий стандартный шрифт
-                font_size = 20 if page_layout == "cells" else 28
-                c.setFont("Helvetica", font_size)
-                
-                # Применение стилей для букв
-                for j, char in enumerate(processed_lines[i]):
-                    # Расположение символа с учетом типа разметки
-                    if page_layout == "cells":
-                        # Для клеток - центрируем каждую букву в своей клетке
-                        x = content_start_x + j * cell_size + cell_size/2 - font_size/3
-                        this_base_y = base_y
-                        
-                        # Смещения для визуального центрирования в клетке
-                        if char.isupper():
-                            this_base_y += cell_size * 0.05  # Слегка вверх
-                        elif char.islower():
-                            this_base_y -= cell_size * 0.05  # Слегка вниз
-                    else:
-                        # Для линеек - размещаем буквы так, чтобы каждая занимала ровно одну секцию
-                        # Рассчитываем ширину одной секции между линиями
-                        section_width = line_height * 2  # Ширина одной секции (равна высоте между линиями)
-                        
-                        # Позиционируем каждую букву точно в своей клетке/секции
-                        x = content_start_x + j * section_width + section_width * 0.3
-                        
-                        # Позиционирование по вертикали зависит от типа буквы
-                        if char.isupper():  # Заглавные буквы
-                            # Заглавные буквы опираются на нижнюю линию и достигают верхней
-                            this_base_y = base_y - line_height * 0.1  # Чуть выше средней линии
-                        else:  # Строчные буквы
-                            # Строчные буквы размещаем между средней и нижней линией
-                            this_base_y = base_y - line_height * 0.7  # Ближе к нижней линии
-                    
-                    # Проверка на выход за границы страницы и ограничение количества символов для предпросмотра
-                    # Для предпросмотра ограничиваем количество символов по ширине (до 15)
-                    if j < 15 and x < content_start_x + content_usable_width - (cell_size if page_layout == "cells" else section_width):
-                        # Применяем выбранный стиль шрифта
-                        if font_type == "punktir":
-                            # Для пунктирного шрифта - имитируем пунктирный контур
-                            c.saveState()
-                            
-                            if page_layout == "cells":
-                                # Для клеток - используем светло-серую заливку
-                                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый
-                                c.drawString(x, this_base_y, char)
-                            else:
-                                # Для линеек - используем тот же подход
-                                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый
-                                c.drawString(x, this_base_y, char)
-                            
-                            c.restoreState()
-                        elif font_type == "gray":
-                            # Очень светлый серый цвет для букв
-                            c.setFillColor(Color(0.6, 0.6, 0.6))
-                            c.drawString(x, this_base_y, char)
-                        else:  # "black"
-                            # Черный цвет для букв
-                            c.setFillColor(black)
-                            c.drawString(x, this_base_y, char)
-        
-        # Добавляем красную линию по правой стороне как в тетради
+        # Рисуем красную линию справа
         c.setStrokeColor(red)
-        c.setDash([])  # Сплошная линия
-        c.setLineWidth(1.0)  # Устанавливаем толщину красной линии
-        
-        # Позиция красной полосы - точно по правому краю
-        red_line_x = page_size[0] - 2  # Близко к правому краю
-        red_line_top = page_size[1] - 1  # Почти до верха страницы
-        red_line_bottom = 1  # Почти до низа страницы
-        c.line(red_line_x, red_line_top, red_line_x, red_line_bottom)
+        c.setLineWidth(1.0)
+        red_line_x = page_size[0] - margin_right
+        c.line(red_line_x, page_size[1] - margin_top, red_line_x, margin_bottom)
         
         # Сохраняем PDF
         c.save()
@@ -733,25 +320,16 @@ async def generate_preview(
         buffer.seek(0)
         pdf_data = buffer.getvalue()
         
-        # Проверяем размер созданного PDF
-        file_size = len(pdf_data)
-        print(f"Размер PDF файла для предпросмотра: {file_size} байт")
-        
-        if file_size == 0:
-            raise HTTPException(status_code=500, detail="Создан пустой PDF файл для предпросмотра")
-        
         # Возвращаем PDF напрямую из памяти
-        from fastapi.responses import Response
         return Response(
             content=pdf_data,
             media_type="application/pdf", 
             headers={"Content-Disposition": "inline; filename=preview.pdf"}
         )
     except Exception as e:
-        # Логируем ошибку и возвращаем детальную информацию
         import traceback
         error_details = traceback.format_exc()
-        print(f"Общая ошибка при генерации предпросмотра: {e}")
+        print(f"Ошибка при генерации предпросмотра: {e}")
         print(error_details)
         raise HTTPException(status_code=500, detail=f"Ошибка при генерации предпросмотра: {str(e)}")
 
@@ -764,9 +342,9 @@ async def root():
 def shutdown_event():
     # Не удаляем системную /tmp директорию
     if temp_dir != "/tmp":
-    shutil.rmtree(temp_dir, ignore_errors=True)
-else:
-    # Удаляем только наши файлы в /tmp
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    else:
+        # Удаляем только наши файлы в /tmp
         import glob
         for f in glob.glob(os.path.join(temp_dir, "propisi_*.pdf")):
             try:
