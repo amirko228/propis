@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор прописей</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .options-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4a639e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #374a77;
+        }
+        button.preview {
+            background-color: #aa3939;
+        }
+        button.preview:hover {
+            background-color: #882e2e;
+        }
+        .error-message {
+            color: #aa3939;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #ffeeee;
+            display: none;
+        }
+        .info {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 300px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .modal-button {
+            background-color: #4a639e;
+            color: white;
+            padding: 8px 16px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Генератор прописей</h1>
+    
+    <div class="section">
+        <h2>Вариант заполнения:</h2>
+        <div class="options-group">
+            <label>
+                <input type="radio" name="fill-type" value="all" id="fill-all">
+                Заполнить все самостоятельно
+            </label>
+            <label>
+                <input type="radio" name="fill-type" value="first_letter" id="fill-first" checked>
+                Размножить первую букву в каждой строке
+            </label>
+            <label>
+                <input type="radio" name="fill-type" value="one_line" id="fill-line">
+                Размножить одну строку на всю страницу
+            </label>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Текст прописи:</h2>
+        <textarea id="text-content">а а а а а а а а а а а
+б б б б б б б б б б б
+в в в в в в в в в в в</textarea>
+        <div class="info">Пустые строки останутся пустыми на странице, а длинные перенесутся автоматически</div>
+    </div>
+    
+    <div class="section">
+        <h2>Дополнительные настройки:</h2>
+        <div class="options-group">
+            <label>Разметка страницы:</label>
+            <label>
+                <input type="radio" name="page-layout" value="lines" checked>
+                Линии
+            </label>
+            <label>
+                <input type="radio" name="page-layout" value="lines_oblique">
+                Линии с наклоном
+            </label>
+            <label>
+                <input type="radio" name="page-layout" value="cells">
+                Клетки
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label>Ориентация страницы:</label>
+            <label>
+                <input type="radio" name="page-orientation" value="portrait" checked>
+                Портретная
+            </label>
+            <label>
+                <input type="radio" name="page-orientation" value="landscape">
+                Альбомная
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label>Стиль шрифта:</label>
+            <label>
+                <input type="radio" name="font-type" value="black" checked>
+                Черный
+            </label>
+            <label>
+                <input type="radio" name="font-type" value="gray">
+                Серый
+            </label>
+            <label>
+                <input type="radio" name="font-type" value="punktir">
+                Пунктирный
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label for="student-name">Имя ученика (необязательно):</label>
+            <input type="text" id="student-name" placeholder="Введите имя ученика">
+        </div>
+    </div>
+    
+    <div class="error-message" id="error-box">
+        Произошла ошибка. Пожалуйста, попробуйте еще раз.
+    </div>
+    
+    <div class="section">
+        <button class="preview" id="preview-button">Предпросмотр</button>
+        <button id="generate-button">Генерация...</button>
+    </div>
+    
+    <!-- Модальное окно подтверждения -->
+    <div id="confirmation-modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-message">Подтвердите действие на propis.vercel.app</p>
+            <button class="modal-button" id="modal-ok">OK</button>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const previewButton = document.getElementById('preview-button');
+            const generateButton = document.getElementById('generate-button');
+            const errorBox = document.getElementById('error-box');
+            const confirmationModal = document.getElementById('confirmation-modal');
+            const modalOkButton = document.getElementById('modal-ok');
+            
+            // Функция для получения выбранного значения радиокнопки
+            function getSelectedRadioValue(name) {
+                const radio = document.querySelector(`input[name="${name}"]:checked`);
+                return radio ? radio.value : '';
+            }
+            
+            // Функция для сбора данных формы
+            function collectFormData() {
+                return {
+                    task: 'practice',
+                    fill_type: getSelectedRadioValue('fill-type'),
+                    text: document.getElementById('text-content').value,
+                    page_layout: getSelectedRadioValue('page-layout'),
+                    font_type: getSelectedRadioValue('font-type'),
+                    page_orientation: getSelectedRadioValue('page-orientation'),
+                    student_name: document.getElementById('student-name').value
+                };
+            }
+            
+            // Функция для показа ошибки
+            function showError(message) {
+                errorBox.textContent = message;
+                errorBox.style.display = 'block';
+                setTimeout(() => {
+                    errorBox.style.display = 'none';
+                }, 5000);
+            }
+            
+            // Функция для показа модального окна
+            function showModal(message) {
+                document.getElementById('modal-message').textContent = message;
+                confirmationModal.style.display = 'block';
+            }
+            
+            // Обработчик кнопки OK в модальном окне
+            modalOkButton.addEventListener('click', function() {
+                confirmationModal.style.display = 'none';
+            });
+            
+            // Обработчик кнопки предпросмотра
+            previewButton.addEventListener('click', function() {
+                const formData = collectFormData();
+                
+                fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success' && data.preview_url) {
+                        // Открываем предпросмотр в новом окне
+                        window.open(data.preview_url, '_blank');
+                    } else {
+                        showError(data.message || 'Не удалось создать предпросмотр');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showError('Ошибка: ' + error.message);
+                    showModal('Ошибка: Request failed with status code 500');
+                });
+            });
+            
+            // Обработчик кнопки генерации
+            generateButton.addEventListener('click', function() {
+                const formData = collectFormData();
+                
+                fetch('/api/generate-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success' && data.file_url) {
+                        // Скачиваем файл
+                        window.location.href = data.file_url;
+                    } else {
+                        showError(data.message || 'Не удалось сгенерировать пропись');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showError('Ошибка: ' + error.message);
+                    showModal('Ошибка: Request failed with status code 500');
+                });
+            });
+        });
+    </script>
+</body>
+</html> 

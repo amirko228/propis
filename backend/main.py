@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Request
-from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.responses import FileResponse, Response, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -50,6 +50,58 @@ if os.environ.get('VERCEL', False):
 else:
     temp_dir = "temp"
 os.makedirs(temp_dir, exist_ok=True)
+
+# Настройка для статических файлов - разместите их в папке static в корне проекта
+# Создаем папку, если её нет
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
+os.makedirs(static_dir, exist_ok=True)
+
+# Монтируем статические файлы через маршрут /static
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Маршрут для отдачи главной страницы из статических файлов
+@app.get("/")
+async def serve_static_index():
+    """
+    Маршрут для отдачи главной страницы из статических файлов
+    """
+    # Формируем путь к файлу index.html в папке static
+    index_path = os.path.join(static_dir, "index.html")
+    
+    # Проверяем, существует ли файл
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        # Если файла нет, возвращаем простую страницу
+        return HTMLResponse("""
+        <html>
+            <head>
+                <title>Генератор прописей</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 40px;
+                        line-height: 1.6;
+                    }
+                    h1 {
+                        color: #333;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Генератор прописей</h1>
+                <p>API сервера работает. Разместите файлы интерфейса в папке static.</p>
+                <h2>Доступные API:</h2>
+                <ul>
+                    <li><a href="/api/test">/api/test</a> - Тестовый API для проверки работы</li>
+                    <li>/api/preview - API для генерации предпросмотра</li>
+                    <li>/api/generate-pdf - API для генерации PDF с прописями</li>
+                </ul>
+            </body>
+        </html>
+        """)
 
 # Регистрируем шрифты - отключаем пользовательские шрифты
 FONT_LOADED = False
@@ -163,7 +215,6 @@ def draw_propisi_lines(c, x, y, width, line_height, count, oblique=False):
             if offset % 2 == 0:  # Рисуем через одну линию для оптимизации
                 c.line(start_x, start_y, end_x, end_y)
 
-@app.get("/")
 async def root():
     return {"message": "API работает"}
 
@@ -195,24 +246,296 @@ async def simple_generate():
 @app.post("/api/preview")
 async def generate_preview(request: Request):
     """
-    Упрощенная версия API для предпросмотра
+    API для создания предпросмотра прописи
     """
     try:
-        return {"status": "success", "message": "Предпросмотр создан успешно"}
+        # Получаем данные из запроса
+        data = await request.json()
+        
+        # Получаем параметры или используем значения по умолчанию
+        task = data.get("task", "practice")
+        fill_type = data.get("fill_type", "first_letter")
+        text = data.get("text", "")
+        page_layout = data.get("page_layout", "lines")
+        font_type = data.get("font_type", "gray")
+        page_orientation = data.get("page_orientation", "portrait")
+        student_name = data.get("student_name", "")
+        
+        # Создаем уникальное имя файла
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"preview_{timestamp}.pdf"
+        filepath = os.path.join(temp_dir, filename)
+        
+        # Определяем размер страницы
+        if page_orientation == "landscape":
+            pagesize = landscape(A4)
+        else:
+            pagesize = A4
+        
+        # Создаем PDF
+        c = canvas.Canvas(filepath, pagesize=pagesize)
+        width, height = pagesize
+        
+        # Настраиваем основной шрифт
+        c.setFont(DEFAULT_FONT, 12)
+        
+        # Добавляем метку предпросмотра
+        c.setFont(DEFAULT_FONT, 10)
+        c.setFillColor(red)
+        c.drawString(width - 150, height - 20, "ПРЕДПРОСМОТР")
+        c.setFillColor(black)
+        
+        # Добавляем заголовок
+        c.setFont(DEFAULT_FONT, 14)
+        title = "Пропись для практики письма"
+        c.drawString(30, height - 40, title)
+        
+        # Определяем отступы
+        margin_left = 30
+        margin_top = 80
+        content_width = width - 2 * margin_left
+        content_height = height - margin_top - 30
+        
+        # Рисуем разметку на странице в зависимости от выбранного типа
+        # Для предпросмотра рисуем только первую часть страницы
+        preview_height = min(300, content_height)  # Ограничиваем высоту для предпросмотра
+        
+        if page_layout == "cells":
+            # Рисуем клетки
+            cell_size = 15  # размер клетки в пунктах
+            rows = int(preview_height / cell_size)
+            cols = int(content_width / cell_size)
+            draw_school_grid(c, margin_left, height - margin_top, cell_size, rows, cols)
+        elif page_layout == "lines_oblique":
+            # Рисуем линии с наклонными линиями
+            line_height = 12  # высота строки
+            draw_propisi_lines(c, margin_left, height - margin_top, content_width, line_height, 10, True)
+        else:  # "lines"
+            # Рисуем обычные линии
+            line_height = 12  # высота строки
+            draw_propisi_lines(c, margin_left, height - margin_top, content_width, line_height, 10, False)
+        
+        # Добавляем текст прописи, если он есть
+        if text:
+            # Разбиваем текст на строки
+            lines = text.split('\n')
+            
+            # Ограничиваем количество строк для предпросмотра
+            preview_lines = lines[:5]  # Только первые 5 строк для предпросмотра
+            
+            # Определяем параметры для текста
+            c.setFont(DEFAULT_FONT, 12)
+            y_position = height - margin_top - line_height
+            
+            # Стиль шрифта в зависимости от выбранного типа
+            if font_type == "punktir":
+                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый для пунктира
+            elif font_type == "gray":
+                c.setFillColor(Color(0.5, 0.5, 0.5))  # Серый
+            else:  # "black"
+                c.setFillColor(black)
+            
+            # Выводим текст в зависимости от способа заполнения
+            for i, line in enumerate(preview_lines):
+                if not line.strip():  # Пропускаем пустые строки
+                    continue
+                    
+                current_y = y_position - i * line_height * 2
+                
+                if fill_type == "first_letter":
+                    # Размножаем первую букву в каждой строке
+                    if line:
+                        first_char = line[0]
+                        c.drawString(margin_left + 5, current_y, first_char * len(line))
+                elif fill_type == "one_line":
+                    # Размножаем первую строку на всю страницу
+                    if i == 0 and line:
+                        for j in range(5):  # Только первые 5 строк для предпросмотра
+                            repeat_y = y_position - j * line_height * 2
+                            c.drawString(margin_left + 5, repeat_y, line)
+                        break  # Выводим только первую строку
+                else:  # "all"
+                    # Выводим текст как есть
+                    c.drawString(margin_left + 5, current_y, line)
+        
+        # Сохраняем PDF
+        c.save()
+        
+        # Формируем URL для просмотра
+        preview_url = f"/preview/{filename}"
+        
+        return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
     except Exception as e:
         print(f"Ошибка в /api/preview: {str(e)}")
-        return {"status": "error", "message": "Произошла ошибка, используйте /api/simple-preview"}
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Произошла ошибка: {str(e)}"}
+        )
+
+# Добавляем маршрут для просмотра предпросмотра
+@app.get("/preview/{filename}")
+async def view_preview(filename: str):
+    """
+    Маршрут для просмотра предпросмотра
+    """
+    file_path = os.path.join(temp_dir, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+        
+    return FileResponse(
+        path=file_path, 
+        filename=filename,
+        media_type="application/pdf"
+    )
+
+# Добавляем маршрут для скачивания файлов
+@app.get("/download/{filename}")
+async def download_file(filename: str):
+    """
+    Маршрут для скачивания сгенерированных файлов
+    """
+    file_path = os.path.join(temp_dir, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+        
+    return FileResponse(
+        path=file_path, 
+        filename=filename,
+        media_type="application/pdf"
+    )
 
 @app.post("/api/generate-pdf")
 async def generate_pdf(request: Request):
     """
-    Упрощенная версия API для генерации PDF
+    API для генерации PDF с прописями
     """
     try:
-        return {"status": "success", "message": "Пропись сгенерирована успешно"}
+        # Получаем данные из запроса
+        data = await request.json()
+        
+        # Получаем параметры или используем значения по умолчанию
+        task = data.get("task", "practice")
+        fill_type = data.get("fill_type", "first_letter")
+        text = data.get("text", "")
+        page_layout = data.get("page_layout", "lines")
+        font_type = data.get("font_type", "gray")
+        page_orientation = data.get("page_orientation", "portrait")
+        student_name = data.get("student_name", "")
+        
+        # Создаем уникальное имя файла
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"propisi_{timestamp}.pdf"
+        filepath = os.path.join(temp_dir, filename)
+        
+        # Определяем размер страницы
+        if page_orientation == "landscape":
+            pagesize = landscape(A4)
+        else:
+            pagesize = A4
+        
+        # Создаем PDF
+        c = canvas.Canvas(filepath, pagesize=pagesize)
+        width, height = pagesize
+        
+        # Настраиваем основной шрифт
+        c.setFont(DEFAULT_FONT, 12)
+        
+        # Добавляем дату в углу
+        c.setFont(DEFAULT_FONT, 8)
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        c.drawRightString(width - 20, height - 20, f"Дата: {today}")
+        
+        # Добавляем заголовок
+        c.setFont(DEFAULT_FONT, 14)
+        title = "Пропись для практики письма"
+        c.drawString(30, height - 40, title)
+        
+        # Если указано имя ученика, добавляем его
+        if student_name:
+            c.setFont(DEFAULT_FONT, 12)
+            c.drawString(30, height - 60, f"Ученик: {student_name}")
+        
+        # Определяем отступы
+        margin_left = 30
+        margin_top = 80
+        content_width = width - 2 * margin_left
+        content_height = height - margin_top - 30
+        
+        # Рисуем разметку на странице в зависимости от выбранного типа
+        if page_layout == "cells":
+            # Рисуем клетки
+            cell_size = 15  # размер клетки в пунктах
+            rows = int(content_height / cell_size)
+            cols = int(content_width / cell_size)
+            draw_school_grid(c, margin_left, height - margin_top, cell_size, rows, cols)
+        elif page_layout == "lines_oblique":
+            # Рисуем линии с наклонными линиями
+            line_height = 12  # высота строки
+            draw_propisi_lines(c, margin_left, height - margin_top, content_width, line_height, 20, True)
+        else:  # "lines"
+            # Рисуем обычные линии
+            line_height = 12  # высота строки
+            draw_propisi_lines(c, margin_left, height - margin_top, content_width, line_height, 20, False)
+        
+        # Добавляем текст прописи, если он есть
+        if text:
+            # Разбиваем текст на строки
+            lines = text.split('\n')
+            
+            # Определяем параметры для текста
+            c.setFont(DEFAULT_FONT, 12)
+            y_position = height - margin_top - line_height
+            
+            # Стиль шрифта в зависимости от выбранного типа
+            if font_type == "punktir":
+                c.setFillColor(Color(0.7, 0.7, 0.7))  # Светло-серый для пунктира
+            elif font_type == "gray":
+                c.setFillColor(Color(0.5, 0.5, 0.5))  # Серый
+            else:  # "black"
+                c.setFillColor(black)
+            
+            # Выводим текст в зависимости от способа заполнения
+            for i, line in enumerate(lines):
+                if not line.strip():  # Пропускаем пустые строки
+                    continue
+                    
+                current_y = y_position - i * line_height * 2
+                
+                # Прерываем, если вышли за пределы страницы
+                if current_y < 30:
+                    break
+                
+                if fill_type == "first_letter":
+                    # Размножаем первую букву в каждой строке
+                    if line:
+                        first_char = line[0]
+                        c.drawString(margin_left + 5, current_y, first_char * len(line))
+                elif fill_type == "one_line":
+                    # Размножаем первую строку на всю страницу
+                    if i == 0 and line:
+                        for j in range(20):  # Максимум 20 строк
+                            repeat_y = y_position - j * line_height * 2
+                            if repeat_y < 30:
+                                break
+                            c.drawString(margin_left + 5, repeat_y, line)
+                        break  # Выводим только первую строку
+                else:  # "all"
+                    # Выводим текст как есть
+                    c.drawString(margin_left + 5, current_y, line)
+        
+        # Сохраняем PDF
+        c.save()
+        
+        # Формируем URL для скачивания
+        file_url = f"/download/{filename}"
+        
+        return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
     except Exception as e:
         print(f"Ошибка в /api/generate-pdf: {str(e)}")
-        return {"status": "error", "message": "Произошла ошибка, используйте /api/simple-generate"}
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Произошла ошибка: {str(e)}"}
+        )
 
 # Удаление временных файлов при выключении сервера
 @app.on_event("shutdown")
