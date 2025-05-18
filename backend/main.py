@@ -58,7 +58,7 @@ class PropisiRequest(BaseModel):
 if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
 else:
-    temp_dir = "temp"
+temp_dir = "temp"
 os.makedirs(temp_dir, exist_ok=True)
 
 # Проверяем возможность записи во временную директорию
@@ -385,8 +385,8 @@ async def generate_preview(request: Request):
                     c.drawString(margin_left + 5, current_y, line)
         
         # Сохраняем PDF в буфер
-        c.save()
-        
+    c.save()
+    
         # Получаем содержимое буфера
         buffer.seek(0)
         
@@ -689,7 +689,7 @@ async def simplified_preview(request: Request):
 def shutdown_event():
     # Не удаляем системную /tmp директорию
     if temp_dir != "/tmp":
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    shutil.rmtree(temp_dir, ignore_errors=True)
     else:
         # Удаляем только наши файлы в /tmp
         import glob
