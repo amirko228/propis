@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Библиотека PDFMake -->
+    <!-- Библиотека pdfmake -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
@@ -236,6 +236,12 @@
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
             
+            // Проверка загрузки pdfmake
+            if (typeof pdfMake === 'undefined') {
+                showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
+                console.error('pdfMake не загружена');
+            }
+            
             // Функция для получения выбранного значения радиокнопки
             function getSelectedRadioValue(name) {
                 const radio = document.querySelector(`input[name="${name}"]:checked`);
@@ -245,6 +251,7 @@
             // Функция для сбора данных формы
             function collectFormData() {
                 return {
+                    task: 'practice',
                     fill_type: getSelectedRadioValue('fill-type'),
                     text: document.getElementById('text-content').value,
                     page_layout: getSelectedRadioValue('page-layout'),
@@ -268,144 +275,95 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Генерация PDF с использованием pdfmake
-            function generatePDF(formData, isPreview = false) {
+            // Генерация PDF с pdfmake
+            function generatePDFClient(formData, isPreview = false) {
                 try {
                     setLoading(true);
                     
-                    // Проверяем наличие библиотеки pdfmake
+                    // Проверяем библиотеку pdfMake
                     if (typeof pdfMake === 'undefined') {
-                        showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
+                        showError('Библиотека pdfMake не загружена. Пожалуйста, обновите страницу.');
                         setLoading(false);
                         return false;
                     }
                     
-                    // Определяем ориентацию
-                    const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
-                    
-                    // Определяем толщину и цвет линий
-                    const lineWidth = 0.5;
-                    const lineColor = '#aaaaaa';
-                    const middleLineColor = '#888888';
-                    
-                    // Определяем цвет текста
-                    let textColor = '#000000';
-                    switch(formData.font_type) {
-                        case 'gray':
-                            textColor = '#777777';
-                            break;
-                        case 'punktir':
-                            textColor = '#aaaaaa';
-                            break;
-                    }
-                    
-                    // Создаем структуру документа
+                    // Настройка документа
+                    const pageOrientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
                     const docDefinition = {
-                        pageOrientation: orientation,
                         pageSize: 'A4',
+                        pageOrientation: pageOrientation,
+                        pageMargins: [40, 40, 40, 40],
                         content: [],
                         styles: {
                             header: {
-                                fontSize: 16,
+                                fontSize: 18,
                                 bold: true,
                                 margin: [0, 0, 0, 10]
                             },
-                            subheader: {
+                            student: {
                                 fontSize: 12,
-                                margin: [0, 5, 0, 5]
+                                margin: [0, 5, 0, 20]
                             },
                             date: {
                                 fontSize: 10,
                                 alignment: 'right',
-                                margin: [0, 0, 0, 10]
+                                margin: [0, 0, 0, 20]
                             },
-                            text: {
+                            preview: {
                                 fontSize: 12,
-                                color: textColor
+                                color: 'red',
+                                alignment: 'right',
+                                margin: [0, 0, 0, 10]
                             }
                         }
                     };
                     
-                    // Добавляем шапку документа
+                    // Добавляем заголовок
                     docDefinition.content.push({ text: 'Пропись для практики письма', style: 'header' });
                     
                     // Если это предпросмотр, добавляем водяной знак
                     if (isPreview) {
-                        docDefinition.watermark = { 
-                            text: 'ПРЕДПРОСМОТР', 
-                            color: 'red', 
-                            opacity: 0.3, 
-                            bold: true 
-                        };
+                        docDefinition.content.push({ text: 'ПРЕДПРОСМОТР', style: 'preview' });
                     }
                     
-                    // Добавляем имя ученика, если есть
+                    // Добавляем имя ученика если есть
                     if (formData.student_name) {
-                        docDefinition.content.push({ text: `Ученик: ${formData.student_name}`, style: 'subheader' });
+                        docDefinition.content.push({ text: `Ученик: ${formData.student_name}`, style: 'student' });
                     }
                     
                     // Добавляем дату
                     const today = new Date().toLocaleDateString('ru-RU');
                     docDefinition.content.push({ text: `Дата: ${today}`, style: 'date' });
                     
-                    // Добавляем пустую строку для отступа
-                    docDefinition.content.push({ text: ' ' });
-                    
-                    // Получаем строки текста
-                    const lines = formData.text.split('\n');
-                    const maxLines = 20; // Максимальное количество строк
-                    let textContent = [];
-                    
-                    // Подготавливаем текст в зависимости от способа заполнения
-                    if (formData.fill_type === 'one_line' && lines[0] && lines[0].trim()) {
-                        // Размножаем первую строку на всю страницу
-                        const firstLine = lines[0].trim();
-                        for (let i = 0; i < maxLines; i++) {
-                            textContent.push(firstLine);
-                        }
-                    } else if (formData.fill_type === 'first_letter') {
-                        // Размножаем первую букву каждой строки
-                        for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
-                            if (!lines[i].trim()) continue;
-                            
-                            const firstChar = lines[i][0] || '';
-                            if (!firstChar) continue;
-                            
-                            // Повторяем первую букву примерно 30 раз
-                            textContent.push(firstChar.repeat(30));
-                        }
-                    } else {
-                        // Выводим текст как есть
-                        for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
-                            if (!lines[i].trim()) continue;
-                            textContent.push(lines[i]);
-                        }
+                    // Определение цвета текста в зависимости от выбранного стиля
+                    let textColor = '#000000'; // Черный по умолчанию
+                    switch (formData.font_type) {
+                        case 'gray':
+                            textColor = '#808080'; // Серый
+                            break;
+                        case 'punktir':
+                            textColor = '#B4B4B4'; // Светло-серый
+                            break;
                     }
                     
-                    // Добавляем текст с соответствующим форматированием
-                    for (let i = 0; i < textContent.length; i++) {
-                        // Добавляем текст строки
-                        docDefinition.content.push({
-                            text: textContent[i],
-                            style: 'text',
-                            margin: [0, 15, 0, 15] // Увеличиваем вертикальные отступы для строк
-                        });
-                    }
+                    // Создаем разметку страницы и контент в зависимости от выбранных параметров
+                    const layout = createPageLayout(formData.page_layout, pageOrientation);
+                    docDefinition.content.push(layout);
                     
-                    // Создаем PDF
-                    const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+                    // Добавляем текст в зависимости от способа заполнения
+                    const textContent = createTextContent(formData.text, formData.fill_type, textColor);
+                    docDefinition.content.push(textContent);
                     
-                    // Обрабатываем результат
+                    // Генерируем PDF
                     setTimeout(() => {
-                        setLoading(false);
-                        
                         if (isPreview) {
-                            // Открываем PDF в новом окне
-                            pdfDocGenerator.open();
+                            // Открываем в новом окне для предпросмотра
+                            pdfMake.createPdf(docDefinition).open();
                         } else {
                             // Скачиваем файл
-                            pdfDocGenerator.download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
+                            pdfMake.createPdf(docDefinition).download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
                         }
+                        setLoading(false);
                     }, 1000);
                     
                     return true;
@@ -417,16 +375,213 @@
                 }
             }
             
+            // Функция для создания разметки страницы
+            function createPageLayout(layoutType, orientation) {
+                const canvas = {
+                    type: 'canvas',
+                    canvas: []
+                };
+                
+                // Размеры страницы A4 в пунктах (pt)
+                const pageWidth = orientation === 'landscape' ? 841.89 : 595.28;
+                const pageHeight = orientation === 'landscape' ? 595.28 : 841.89;
+                
+                const marginLeft = 40;
+                const marginTop = 120; // Учитываем место для заголовка
+                const contentWidth = pageWidth - 2 * marginLeft;
+                const contentHeight = pageHeight - marginTop - 40;
+                
+                // Функция для добавления горизонтальных линий
+                function addHorizontalLines() {
+                    const lineHeight = 20; // Высота строки
+                    const groupHeight = lineHeight * 2; // Высота группы из двух линий
+                    
+                    let currentY = marginTop;
+                    while (currentY < marginTop + contentHeight) {
+                        // Средняя линия
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: marginLeft,
+                            y1: currentY + lineHeight,
+                            x2: marginLeft + contentWidth,
+                            y2: currentY + lineHeight,
+                            lineWidth: 0.5,
+                            lineColor: '#969696'
+                        });
+                        
+                        // Нижняя линия
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: marginLeft,
+                            y1: currentY + lineHeight * 2,
+                            x2: marginLeft + contentWidth,
+                            y2: currentY + lineHeight * 2,
+                            lineWidth: 0.5,
+                            lineColor: '#C8C8C8'
+                        });
+                        
+                        currentY += groupHeight;
+                    }
+                }
+                
+                // Функция для добавления наклонных линий
+                function addObliqueLines() {
+                    // Сначала добавляем обычные горизонтальные линии
+                    addHorizontalLines();
+                    
+                    // Затем добавляем наклонные линии
+                    const step = 20; // Шаг между наклонными линиями
+                    
+                    // Определяем угол наклона (примерно 60 градусов)
+                    for (let offset = 0; offset < contentWidth + contentHeight; offset += step) {
+                        // Начальная и конечная точки для наклонной линии
+                        let x1 = marginLeft + offset;
+                        let y1 = marginTop;
+                        
+                        if (x1 > marginLeft + contentWidth) {
+                            // Если вышли за правую границу, начинаем с правой границы и уходим вниз
+                            const excess = x1 - (marginLeft + contentWidth);
+                            x1 = marginLeft + contentWidth;
+                            y1 = marginTop + excess;
+                        }
+                        
+                        let x2 = x1 - contentHeight;
+                        let y2 = y1 + contentHeight;
+                        
+                        if (x2 < marginLeft) {
+                            // Если вышли за левую границу, начинаем с левой границы и уходим вниз
+                            const excess = marginLeft - x2;
+                            x2 = marginLeft;
+                            y2 = y2 - excess;
+                        }
+                        
+                        // Рисуем только если линия видима
+                        if (y2 >= marginTop && y1 <= marginTop + contentHeight) {
+                            canvas.canvas.push({
+                                type: 'line',
+                                x1: x1,
+                                y1: y1,
+                                x2: x2,
+                                y2: y2,
+                                lineWidth: 0.5,
+                                lineColor: '#DCDCDC'
+                            });
+                        }
+                    }
+                }
+                
+                // Функция для добавления клеток
+                function addCells() {
+                    const cellSize = 20; // Размер клетки
+                    const rows = Math.floor(contentHeight / cellSize);
+                    const cols = Math.floor(contentWidth / cellSize);
+                    
+                    // Горизонтальные линии
+                    for (let i = 0; i <= rows; i++) {
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: marginLeft,
+                            y1: marginTop + i * cellSize,
+                            x2: marginLeft + cols * cellSize,
+                            y2: marginTop + i * cellSize,
+                            lineWidth: 0.5,
+                            lineColor: '#B4B4B4'
+                        });
+                    }
+                    
+                    // Вертикальные линии
+                    for (let i = 0; i <= cols; i++) {
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: marginLeft + i * cellSize,
+                            y1: marginTop,
+                            x2: marginLeft + i * cellSize,
+                            y2: marginTop + rows * cellSize,
+                            lineWidth: 0.5,
+                            lineColor: '#B4B4B4'
+                        });
+                    }
+                }
+                
+                // Выбираем тип разметки
+                switch (layoutType) {
+                    case 'lines_oblique':
+                        addObliqueLines();
+                        break;
+                    case 'cells':
+                        addCells();
+                        break;
+                    default:
+                        addHorizontalLines();
+                }
+                
+                return canvas;
+            }
+            
+            // Функция для создания текстового содержимого
+            function createTextContent(text, fillType, textColor) {
+                const lines = text.split('\n');
+                const textContent = [];
+                
+                // Высота строки и отступ
+                const lineHeight = 40; // Высота строки в pt
+                const marginTop = 120; // Отступ сверху (после заголовка)
+                const marginLeft = 45; // Отступ слева
+                
+                if (fillType === 'first_letter') {
+                    // Размножаем первую букву в каждой строке
+                    for (let i = 0; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue; // Пропускаем пустые строки
+                        
+                        const firstChar = lines[i][0] || '';
+                        if (firstChar) {
+                            const repeatedText = firstChar.repeat(30); // Примерное количество символов в строке
+                            textContent.push({
+                                text: repeatedText,
+                                absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                                color: textColor
+                            });
+                        }
+                    }
+                } else if (fillType === 'one_line') {
+                    // Размножаем первую строку на всю страницу
+                    if (lines[0] && lines[0].trim()) {
+                        const firstLine = lines[0].trim();
+                        // Повторяем первую строку на всю страницу (примерно 20 строк)
+                        for (let i = 0; i < 20; i++) {
+                            textContent.push({
+                                text: firstLine,
+                                absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                                color: textColor
+                            });
+                        }
+                    }
+                } else {
+                    // Заполняем все строки как есть
+                    for (let i = 0; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue; // Пропускаем пустые строки
+                        
+                        textContent.push({
+                            text: lines[i],
+                            absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                            color: textColor
+                        });
+                    }
+                }
+                
+                return textContent;
+            }
+            
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDF(formData, true);
+                generatePDFClient(formData, true);
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDF(formData, false);
+                generatePDFClient(formData, false);
             });
         });
     </script>

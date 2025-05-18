@@ -1,21 +1,42 @@
 {
   "version": 2,
   "builds": [
-    { 
-      "src": "main.py", 
-      "use": "@vercel/python",
-      "config": { "runtime": "python3.9" } 
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": { 
+        "distDir": "build"
+      }
     },
     {
-      "src": "static/**",
-      "use": "@vercel/static"
+      "src": "backend/run.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
-    { "src": "/static/(.*)", "dest": "/static/$1" },
-    { "src": "/(.*)", "dest": "/main.py" }
-  ],
-  "env": {
-    "PYTHONUNBUFFERED": "1"
-  }
+    {
+      "src": "/api/(.*)",
+      "dest": "/backend/run.py"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/frontend/static/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/frontend/favicon.ico"
+    },
+    {
+      "src": "/manifest.json",
+      "dest": "/frontend/manifest.json"
+    },
+    {
+      "src": "/logo192.png",
+      "dest": "/frontend/logo192.png" 
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/index.html"
+    }
+  ]
 } 
