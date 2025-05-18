@@ -227,6 +227,16 @@
             <button class="preview" id="preview-button">Предпросмотр PDF</button>
             <button id="generate-button">Скачать PDF</button>
         </div>
+        <div class="options-group" style="margin-top: 20px;">
+            <label>
+                <input type="radio" name="generation-mode" value="client" checked>
+                Клиентская генерация (быстрее, работает оффлайн)
+            </label>
+            <label>
+                <input type="radio" name="generation-mode" value="server">
+                Серверная генерация (поддержка сложного форматирования)
+            </label>
+        </div>
     </div>
     
     <script>
@@ -250,7 +260,8 @@
                     page_layout: getSelectedRadioValue('page-layout'),
                     font_type: getSelectedRadioValue('font-type'),
                     page_orientation: getSelectedRadioValue('page-orientation'),
-                    student_name: document.getElementById('student-name').value
+                    student_name: document.getElementById('student-name').value,
+                    generation_mode: getSelectedRadioValue('generation-mode')
                 };
             }
             
@@ -268,8 +279,83 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
+            // Генерация PDF на сервере через API
+            async function generatePDFServerSide(formData, isPreview = false) {
+                try {
+                    setLoading(true);
+                    
+                    // Вызываем API
+                    const response = await fetch('/api/generate-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    // Проверяем статус ответа
+                    if (!response.ok) {
+                        let errorText = `Ошибка при генерации PDF: ${response.status} ${response.statusText}`;
+                        try {
+                            const errorData = await response.json();
+                            errorText += `\nДетали: ${errorData.message || errorData.error || JSON.stringify(errorData)}`;
+                        } catch (e) {
+                            // Если не удалось распарсить JSON
+                        }
+                        throw new Error(errorText);
+                    }
+                    
+                    // Получаем PDF как Blob
+                    const blob = await response.blob();
+                    
+                    // Создаем URL для скачивания
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    if (isPreview) {
+                        // Открываем PDF в новом окне
+                        window.open(url, '_blank');
+                    } else {
+                        // Скачиваем файл
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                    
+                    setLoading(false);
+                    return true;
+                } catch (error) {
+                    console.error('Ошибка при запросе к API:', error);
+                    showError(`Ошибка: ${error.message}`);
+                    setLoading(false);
+                    
+                    // Предлагаем переключиться на клиентский режим при ошибке сервера
+                    if (error.message.includes("500")) {
+                        setTimeout(() => {
+                            if (confirm("Возникла ошибка на сервере. Переключиться на клиентскую генерацию PDF?")) {
+                                document.querySelector('input[name="generation-mode"][value="client"]').checked = true;
+                                alert("Режим изменен на клиентскую генерацию. Попробуйте снова.");
+                            }
+                        }, 1000);
+                    }
+                    
+                    return false;
+                }
+            }
+            
             // Генерация PDF с использованием pdfmake
             function generatePDF(formData, isPreview = false) {
+                // Проверяем режим генерации
+                const generationMode = formData.generation_mode || 'client';
+                
+                // Если выбрана серверная генерация, используем API
+                if (generationMode === 'server') {
+                    return generatePDFServerSide(formData, isPreview);
+                }
+                
+                // Иначе используем клиентскую генерацию
                 try {
                     setLoading(true);
                     
@@ -417,13 +503,12 @@
                 }
             }
             
-            // Обработчик кнопки предпросмотра
+            // Обработчики кнопок
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
                 generatePDF(formData, true);
             });
             
-            // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
                 generatePDF(formData, false);
