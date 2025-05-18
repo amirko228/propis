@@ -49,7 +49,25 @@ if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
 else:
     temp_dir = "temp"
-    os.makedirs(temp_dir, exist_ok=True)
+os.makedirs(temp_dir, exist_ok=True)
+
+# Проверяем возможность записи во временную директорию
+try:
+    test_file = os.path.join(temp_dir, "test_write.txt")
+    with open(test_file, "w") as f:
+        f.write("test")
+    if os.path.exists(test_file):
+        os.remove(test_file)
+        print(f"Временная директория {temp_dir} доступна для записи")
+    else:
+        print(f"Не удалось проверить запись в {temp_dir}")
+except Exception as e:
+    print(f"Ошибка при проверке временной директории: {str(e)}")
+    # На Vercel попробуем использовать базовый tmp каталог
+    if os.environ.get('VERCEL', False):
+        temp_dir = "/tmp"
+        print(f"Используем альтернативный временный каталог: {temp_dir}")
+        os.makedirs(temp_dir, exist_ok=True)
 
 # Настройка для статических файлов - разместите их в папке static в корне проекта
 # Создаем папку, если её нет
@@ -261,7 +279,7 @@ async def generate_preview(request: Request):
         page_orientation = data.get("page_orientation", "portrait")
         student_name = data.get("student_name", "")
         
-        # Создаем буфер в памяти вместо файла на диске
+        # Создаем буфер в памяти для PDF вместо создания файла
         buffer = io.BytesIO()
         
         # Определяем размер страницы
@@ -270,7 +288,7 @@ async def generate_preview(request: Request):
         else:
             pagesize = A4
         
-        # Создаем PDF в буфере
+        # Создаем PDF
         c = canvas.Canvas(buffer, pagesize=pagesize)
         width, height = pagesize
         
@@ -359,33 +377,41 @@ async def generate_preview(request: Request):
         # Сохраняем PDF в буфер
         c.save()
         
-        # Перемещаем указатель в начало буфера
+        # Получаем содержимое буфера
         buffer.seek(0)
         
-        # В Vercel окружении возвращаем PDF напрямую
-        if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
+        # Проверяем, работаем ли на Vercel
+        is_vercel = os.environ.get('VERCEL', False)
+        
+        if is_vercel:
+            # На Vercel возвращаем PDF напрямую
             return Response(
-                content=buffer.getvalue(),
+                content=buffer.read(),
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"inline; filename=preview.pdf"}
+                headers={"Content-Disposition": "inline; filename=preview.pdf"}
             )
         else:
-            # В локальном окружении сохраняем в файл
+            # В локальной среде сохраняем файл как раньше
+            # Создаем уникальное имя файла
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f"preview_{timestamp}.pdf"
             filepath = os.path.join(temp_dir, filename)
             
+            # Сохраняем буфер в файл
             with open(filepath, "wb") as f:
                 f.write(buffer.getvalue())
             
             # Формируем URL для просмотра
             preview_url = f"/preview/{filename}"
-            return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
             
+            return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
     except Exception as e:
         print(f"Ошибка в /api/preview: {str(e)}")
+        # Более подробная обработка ошибок
         error_message = f"Произошла ошибка: {str(e)}"
         print(error_message)
+        import traceback
+        print(traceback.format_exc())  # Для отладки выводим полный стек вызовов
         
         return JSONResponse(
             status_code=500,
@@ -398,23 +424,15 @@ async def view_preview(filename: str):
     """
     Маршрут для просмотра предпросмотра
     """
-    try:
-        file_path = os.path.join(temp_dir, filename)
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Файл не найден")
-            
-        # Проверяем доступность файла для чтения
-        if not os.access(file_path, os.R_OK):
-            raise HTTPException(status_code=500, detail="Файл недоступен для чтения")
-            
-        return FileResponse(
-            path=file_path, 
-            filename=filename,
-            media_type="application/pdf"
-        )
-    except Exception as e:
-        print(f"Ошибка при просмотре файла {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Ошибка при доступе к файлу: {str(e)}")
+    file_path = os.path.join(temp_dir, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+        
+    return FileResponse(
+        path=file_path, 
+        filename=filename,
+        media_type="application/pdf"
+    )
 
 # Добавляем маршрут для скачивания файлов
 @app.get("/download/{filename}")
@@ -422,23 +440,15 @@ async def download_file(filename: str):
     """
     Маршрут для скачивания сгенерированных файлов
     """
-    try:
-        file_path = os.path.join(temp_dir, filename)
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Файл не найден")
-            
-        # Проверяем доступность файла для чтения
-        if not os.access(file_path, os.R_OK):
-            raise HTTPException(status_code=500, detail="Файл недоступен для чтения")
-            
-        return FileResponse(
-            path=file_path, 
-            filename=filename,
-            media_type="application/pdf"
-        )
-    except Exception as e:
-        print(f"Ошибка при скачивании файла {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Ошибка при доступе к файлу: {str(e)}")
+    file_path = os.path.join(temp_dir, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    
+    return FileResponse(
+        path=file_path, 
+        filename=filename,
+        media_type="application/pdf"
+    )
 
 @app.post("/api/generate-pdf")
 async def generate_pdf(request: Request):
@@ -458,7 +468,7 @@ async def generate_pdf(request: Request):
         page_orientation = data.get("page_orientation", "portrait")
         student_name = data.get("student_name", "")
         
-        # Создаем буфер в памяти вместо файла на диске
+        # Создаем буфер в памяти для PDF вместо создания файла
         buffer = io.BytesIO()
         
         # Определяем размер страницы
@@ -467,7 +477,7 @@ async def generate_pdf(request: Request):
         else:
             pagesize = A4
         
-        # Создаем PDF в буфере
+        # Создаем PDF
         c = canvas.Canvas(buffer, pagesize=pagesize)
         width, height = pagesize
         
@@ -560,34 +570,43 @@ async def generate_pdf(request: Request):
         # Сохраняем PDF в буфер
         c.save()
         
-        # Перемещаем указатель в начало буфера
+        # Получаем содержимое буфера
         buffer.seek(0)
         
-        # В Vercel окружении возвращаем PDF напрямую
-        if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
+        # Проверяем, работаем ли на Vercel
+        is_vercel = os.environ.get('VERCEL', False)
+        
+        if is_vercel:
+            # На Vercel возвращаем PDF напрямую
+            filename = f"propisi_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
             return Response(
-                content=buffer.getvalue(),
+                content=buffer.read(),
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename=propisi.pdf"}
+                headers={"Content-Disposition": f"attachment; filename={filename}"}
             )
         else:
-            # В локальном окружении сохраняем в файл
+            # В локальной среде сохраняем файл как раньше
+            # Создаем уникальное имя файла
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f"propisi_{timestamp}.pdf"
             filepath = os.path.join(temp_dir, filename)
             
+            # Сохраняем буфер в файл
             with open(filepath, "wb") as f:
                 f.write(buffer.getvalue())
             
             # Формируем URL для скачивания
             file_url = f"/download/{filename}"
-            return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
             
+            return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
     except Exception as e:
         print(f"Ошибка в /api/generate-pdf: {str(e)}")
+        # Более подробная обработка ошибок для отладки
         error_type = type(e).__name__
         error_message = f"Произошла ошибка типа {error_type}: {str(e)}"
         print(error_message)
+        import traceback
+        print(traceback.format_exc())  # Для отладки выводим полный стек вызовов
         
         return JSONResponse(
             status_code=500,
@@ -599,7 +618,7 @@ async def generate_pdf(request: Request):
 def shutdown_event():
     # Не удаляем системную /tmp директорию
     if temp_dir != "/tmp":
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    shutil.rmtree(temp_dir, ignore_errors=True)
     else:
         # Удаляем только наши файлы в /tmp
         import glob

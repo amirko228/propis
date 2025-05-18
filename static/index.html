@@ -261,13 +261,41 @@
                 })
                 .then(response => {
                     if (!response.ok) {
+                        // Если это не JSON-ответ, получаем текст ошибки
+                        if (!response.headers.get('content-type')?.includes('application/json')) {
+                            return response.text().then(text => {
+                                throw new Error(`Ошибка сервера: ${response.status} - ${text}`);
+                            });
+                        }
                         return response.json().then(errorData => {
                             throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
                         });
                     }
+                    
+                    // Проверяем тип ответа
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/pdf')) {
+                        // Это прямой PDF-ответ
+                        // Преобразуем ответ в Blob
+                        return response.blob().then(blob => {
+                            // Создаем URL для Blob
+                            const url = URL.createObjectURL(blob);
+                            // Открываем PDF в новом окне
+                            window.open(url, '_blank');
+                            // Возвращаем объект, совместимый с дальнейшей обработкой
+                            return { status: 'success', direct_pdf: true };
+                        });
+                    }
+                    
+                    // Это JSON-ответ с URL
                     return response.json();
                 })
                 .then(data => {
+                    if (data.direct_pdf) {
+                        // Уже обработано выше
+                        return;
+                    }
+                    
                     if (data.status === 'success' && data.preview_url) {
                         // Открываем предпросмотр в новом окне
                         window.open(data.preview_url, '_blank');
@@ -296,13 +324,51 @@
                 })
                 .then(response => {
                     if (!response.ok) {
+                        // Если это не JSON-ответ, получаем текст ошибки
+                        if (!response.headers.get('content-type')?.includes('application/json')) {
+                            return response.text().then(text => {
+                                throw new Error(`Ошибка сервера: ${response.status} - ${text}`);
+                            });
+                        }
                         return response.json().then(errorData => {
                             throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
                         });
                     }
+                    
+                    // Проверяем тип ответа
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/pdf')) {
+                        // Это прямой PDF-ответ
+                        // Преобразуем ответ в Blob
+                        return response.blob().then(blob => {
+                            // Создаем URL для Blob
+                            const url = URL.createObjectURL(blob);
+                            
+                            // Создаем ссылку для скачивания
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            
+                            // Очищаем URL
+                            setTimeout(() => URL.revokeObjectURL(url), 100);
+                            
+                            // Возвращаем объект, совместимый с дальнейшей обработкой
+                            return { status: 'success', direct_pdf: true };
+                        });
+                    }
+                    
+                    // Это JSON-ответ с URL
                     return response.json();
                 })
                 .then(data => {
+                    if (data.direct_pdf) {
+                        // Уже обработано выше
+                        return;
+                    }
+                    
                     if (data.status === 'success' && data.file_url) {
                         // Скачиваем файл
                         window.location.href = data.file_url;

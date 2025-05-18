@@ -166,7 +166,7 @@ const PropisiForm = () => {
       });
       
       console.log('Получен ответ от сервера:', response);
-      
+
       // Проверяем ответ и обрабатываем его
       if (response.data && (response.data.message || response.data.status === 'success')) {
         // Показываем сообщение об успехе
@@ -205,8 +205,8 @@ const PropisiForm = () => {
       
       <div className="form-description">
         <p>Создавайте красивые прописи для обучения детей письму. Выберите варианты оформления и введите нужный текст.</p>
-      </div>
-      
+        </div>
+
       {/* Отображаем сообщение об успехе, если оно есть */}
       {success && resultMessage && (
         <div className="success-message" style={{ 
@@ -234,7 +234,7 @@ const PropisiForm = () => {
           <strong>Ошибка:</strong> {error}
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit}>
         {/* Секция разметки страницы */}
         <div className="form-group">
