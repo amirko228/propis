@@ -36,10 +36,11 @@ app = FastAPI(title="Генератор прописей")
 # Настройка CORS - максимально открытая для тестирования
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*", "https://propis.vercel.app", "http://localhost:3000", "http://localhost:8000"],  # Разрешаем все источники и конкретные домены
+    allow_origins=["*"],  # Разрешаем все источники
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Указываем конкретные методы
-    allow_headers=["*", "Content-Type", "Authorization"],  # Разрешаем все заголовки и конкретные
+    allow_methods=["*"],  # Разрешаем все методы
+    allow_headers=["*"],  # Разрешаем все заголовки
+    expose_headers=["Content-Disposition"],  # Открываем доступ к Content-Disposition
 )
 
 # Модель данных для запроса
@@ -389,31 +390,18 @@ async def generate_preview(request: Request):
         # Получаем содержимое буфера
         buffer.seek(0)
         
-        # Проверяем, работаем ли на Vercel
-        is_vercel = os.environ.get('VERCEL', False)
+        # Всегда возвращаем PDF напрямую, не используя файловую систему
+        return Response(
+            content=buffer.read(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "inline; filename=preview.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
         
-        if is_vercel:
-            # На Vercel возвращаем PDF напрямую
-            return Response(
-                content=buffer.read(),
-                media_type="application/pdf",
-                headers={"Content-Disposition": "inline; filename=preview.pdf"}
-            )
-        else:
-            # В локальной среде сохраняем файл как раньше
-            # Создаем уникальное имя файла
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            filename = f"preview_{timestamp}.pdf"
-            filepath = os.path.join(temp_dir, filename)
-            
-            # Сохраняем буфер в файл
-            with open(filepath, "wb") as f:
-                f.write(buffer.getvalue())
-            
-            # Формируем URL для просмотра
-            preview_url = f"/preview/{filename}"
-            
-            return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
     except Exception as e:
         print(f"Ошибка в /api/preview: {str(e)}")
         # Более подробная обработка ошибок
@@ -424,7 +412,12 @@ async def generate_preview(request: Request):
         
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": error_message, "error_details": str(e)}
+            content={"status": "error", "message": error_message, "error_details": str(e)},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
         )
 
 # Добавляем маршрут для просмотра предпросмотра
@@ -483,7 +476,7 @@ async def generate_pdf(request: Request):
         # Определяем размер страницы
         if page_orientation == "landscape":
             pagesize = landscape(A4)
-            else:
+        else:
             pagesize = A4
         
         # Создаем PDF
@@ -582,32 +575,19 @@ async def generate_pdf(request: Request):
         # Получаем содержимое буфера
         buffer.seek(0)
         
-        # Проверяем, работаем ли на Vercel
-        is_vercel = os.environ.get('VERCEL', False)
+        # Всегда возвращаем PDF напрямую, не используя файловую систему
+        filename = f"propisi_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        return Response(
+            content=buffer.read(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
         
-        if is_vercel:
-            # На Vercel возвращаем PDF напрямую
-            filename = f"propisi_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-            return Response(
-                content=buffer.read(),
-                media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename={filename}"}
-            )
-        else:
-            # В локальной среде сохраняем файл как раньше
-            # Создаем уникальное имя файла
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            filename = f"propisi_{timestamp}.pdf"
-            filepath = os.path.join(temp_dir, filename)
-            
-            # Сохраняем буфер в файл
-            with open(filepath, "wb") as f:
-                f.write(buffer.getvalue())
-            
-            # Формируем URL для скачивания
-            file_url = f"/download/{filename}"
-            
-            return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
     except Exception as e:
         print(f"Ошибка в /api/generate-pdf: {str(e)}")
         # Более подробная обработка ошибок для отладки
@@ -619,7 +599,12 @@ async def generate_pdf(request: Request):
         
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "message": error_message, "error_details": str(e), "error_type": error_type}
+            content={"status": "error", "message": error_message, "error_details": str(e), "error_type": error_type},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
         )
 
 # Добавим простой маршрут для проверки, что функция работает без работы с PDF
@@ -765,6 +750,21 @@ async def basic_pdf():
             status_code=500,
             content={"status": "error", "message": error_message}
         )
+
+@app.options("/api/{path:path}")
+async def options_handler(path: str):
+    """
+    Обработчик для OPTIONS запросов для поддержки CORS
+    """
+    return Response(
+        content="",
+        media_type="text/plain",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

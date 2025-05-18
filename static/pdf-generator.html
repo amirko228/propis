@@ -9,9 +9,12 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Библиотека pdfmake -->
+    <!-- Библиотека pdfmake для клиентской генерации PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    
+    <!-- Axios для запросов к серверу (опционально) -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     
     <style>
         body {
@@ -129,6 +132,23 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .method-toggle {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #eaeaea;
+            border-radius: 4px;
+        }
+        .btn-toggle {
+            background-color: #6a8aca;
+            margin: 0 5px;
+            padding: 8px 16px;
+        }
+        .btn-toggle.active {
+            background-color: #2c3e87;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -142,6 +162,11 @@
     <div class="loading" id="loading">
         <div class="spinner"></div>
         <p>Создание PDF...</p>
+    </div>
+    
+    <div class="method-toggle">
+        <button id="client-method" class="btn-toggle active">Генерация в браузере</button>
+        <button id="server-method" class="btn-toggle">Генерация на сервере</button>
     </div>
     
     <div class="section">
@@ -235,6 +260,24 @@
             const generateButton = document.getElementById('generate-button');
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
+            const clientMethodBtn = document.getElementById('client-method');
+            const serverMethodBtn = document.getElementById('server-method');
+            
+            // По умолчанию используем клиентский метод
+            let useServerMethod = false;
+            
+            // Обработчики переключения метода
+            clientMethodBtn.addEventListener('click', function() {
+                useServerMethod = false;
+                clientMethodBtn.classList.add('active');
+                serverMethodBtn.classList.remove('active');
+            });
+            
+            serverMethodBtn.addEventListener('click', function() {
+                useServerMethod = true;
+                serverMethodBtn.classList.add('active');
+                clientMethodBtn.classList.remove('active');
+            });
             
             // Проверка загрузки pdfmake
             if (typeof pdfMake === 'undefined') {
@@ -273,6 +316,58 @@
             // Показать/скрыть индикатор загрузки
             function setLoading(isLoading) {
                 loadingElement.style.display = isLoading ? 'block' : 'none';
+            }
+            
+            // Функция для отправки запроса на сервер
+            async function sendServerRequest(formData, isPreview = false) {
+                try {
+                    setLoading(true);
+                    
+                    // Определяем URL запроса
+                    const apiUrl = isPreview ? 
+                        'https://propisi-backend.vercel.app/api/preview' : 
+                        'https://propisi-backend.vercel.app/api/generate-pdf';
+                    
+                    // Делаем запрос на сервер
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    // Проверяем успешность запроса
+                    if (!response.ok) {
+                        throw new Error(`Ошибка запроса: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    // Получаем ответ в виде Blob для PDF
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Открываем PDF в зависимости от операции
+                    if (isPreview) {
+                        // Открываем в новом окне для предпросмотра
+                        window.open(url, '_blank');
+                    } else {
+                        // Скачиваем файл
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                    
+                    setLoading(false);
+                    return true;
+                } catch (error) {
+                    console.error('Ошибка при запросе к серверу:', error);
+                    showError(`Ошибка при запросе к серверу: ${error.message}`);
+                    setLoading(false);
+                    return false;
+                }
             }
             
             // Генерация PDF с pdfmake
@@ -575,13 +670,23 @@
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDFClient(formData, true);
+                
+                if (useServerMethod) {
+                    sendServerRequest(formData, true);
+                } else {
+                    generatePDFClient(formData, true);
+                }
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDFClient(formData, false);
+                
+                if (useServerMethod) {
+                    sendServerRequest(formData, false);
+                } else {
+                    generatePDFClient(formData, false);
+                }
             });
         });
     </script>

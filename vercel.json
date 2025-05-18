@@ -1,42 +1,36 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { 
-        "distDir": "build"
-      }
-    },
-    {
-      "src": "backend/run.py",
-      "use": "@vercel/python"
-    }
+    { "src": "backend/main.py", "use": "@vercel/python" },
+    { "src": "frontend/build/**", "use": "@vercel/static" },
+    { "src": "static/**", "use": "@vercel/static" }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/run.py"
+    { "src": "/api/(.*)", "dest": "/backend/main.py" },
+    { "src": "/preview/(.*)", "dest": "/backend/main.py" },
+    { "src": "/download/(.*)", "dest": "/backend/main.py" },
+    { 
+      "src": "/(.*)", 
+      "dest": "/static/$1", 
+      "continue": true 
     },
+    { 
+      "src": "/(.*)", 
+      "dest": "/frontend/build/$1" 
+    }
+  ],
+  "env": {
+    "VERCEL": "1"
+  },
+  "headers": [
     {
-      "src": "/static/(.*)",
-      "dest": "/frontend/static/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/frontend/favicon.ico"
-    },
-    {
-      "src": "/manifest.json",
-      "dest": "/frontend/manifest.json"
-    },
-    {
-      "src": "/logo192.png",
-      "dest": "/frontend/logo192.png" 
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/index.html"
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
+        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" }
+      ]
     }
   ]
 } 
