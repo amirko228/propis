@@ -226,6 +226,10 @@
         <div class="actions">
             <button class="preview" id="preview-button">Предпросмотр PDF</button>
             <button id="generate-button">Скачать PDF</button>
+            <button id="test-button" onclick="testPdf()">Проверить PDF</button>
+        </div>
+        <div class="info" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+            Если генерация не работает, <a href="/api/simple-pdf" target="_blank">проверьте базовый PDF</a>
         </div>
     </div>
     
@@ -236,6 +240,11 @@
                 window.location.search = '?nocache=' + new Date().getTime();
             }
         };
+
+        // Функция тестирования PDF
+        function testPdf() {
+            window.open('/api/simple-pdf', '_blank');
+        }
 
         // Проверка наличия библиотеки pdfMake
         if (typeof pdfMake === 'undefined') {
@@ -249,15 +258,14 @@
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
             
-            // Показываем версию библиотеки в консоли
-            console.log('Версия pdfMake:', pdfMake.version || 'неизвестна');
-            
             // Функция для показа ошибки
             function showError(message) {
                 console.error('ОШИБКА:', message);
                 errorBox.textContent = message;
                 errorBox.style.display = 'block';
-                alert('Возникла ошибка: ' + message);
+                setTimeout(() => {
+                    errorBox.style.display = 'none';
+                }, 7000);
             }
             
             // Показать/скрыть индикатор загрузки
@@ -271,130 +279,127 @@
                 return radio ? radio.value : '';
             }
             
+            // Функция для сбора данных формы
+            function collectFormData() {
+                return {
+                    task: 'practice',
+                    fill_type: getSelectedRadioValue('fill-type'),
+                    text: document.getElementById('text-content').value,
+                    page_layout: getSelectedRadioValue('page-layout'),
+                    font_type: getSelectedRadioValue('font-type'),
+                    page_orientation: getSelectedRadioValue('page-orientation'),
+                    student_name: document.getElementById('student-name').value
+                };
+            }
+            
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
-                console.log('Нажата кнопка предпросмотра');
-                
                 try {
-                    if (typeof pdfMake === 'undefined') {
-                        showError('Библиотека pdfMake не загружена');
-                        return;
-                    }
-                    
                     setLoading(true);
+                    const formData = collectFormData();
                     
-                    // Собираем параметры
-                    const fillType = getSelectedRadioValue('fill-type');
-                    const text = document.getElementById('text-content').value;
-                    const pageLayout = getSelectedRadioValue('page-layout');
-                    const fontType = getSelectedRadioValue('font-type');
-                    const pageOrientation = getSelectedRadioValue('page-orientation');
-                    const studentName = document.getElementById('student-name').value;
-                    
-                    console.log('Параметры:', { fillType, pageLayout, fontType, pageOrientation, studentName });
-                    console.log('Текст:', text);
-                    
-                    // Настройка документа
-                    const orientation = pageOrientation === 'landscape' ? 'landscape' : 'portrait';
-                    
-                    // Базовые параметры документа
-                    const docDefinition = {
-                        pageSize: 'A4',
-                        pageOrientation: orientation,
-                        pageMargins: [40, 40, 40, 40],
-                        content: [{
-                            text: 'Пропись для практики письма',
-                            style: 'header'
-                        }, {
-                            text: 'ПРЕДПРОСМОТР',
-                            style: 'preview'
-                        }],
-                        styles: {
-                            header: {
-                                fontSize: 18,
-                                bold: true,
-                                margin: [0, 0, 0, 10]
-                            },
-                            preview: {
-                                fontSize: 12,
-                                color: 'red',
-                                alignment: 'right',
-                                margin: [0, 0, 0, 10]
+                    // Создаем URL для предпросмотра в новом окне
+                    fetch('/api/generate-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 500) {
+                                // Пробуем альтернативный путь
+                                window.open('/api/simple-pdf', '_blank');
+                                showError("Ошибка на сервере. Открываем тестовый PDF.");
+                            } else {
+                                throw new Error(`Ошибка: ${response.status}`);
                             }
+                            return;
                         }
-                    };
-                    
-                    // Добавляем имя ученика если есть
-                    if (studentName) {
-                        docDefinition.content.push({
-                            text: `Ученик: ${studentName}`,
-                            fontSize: 12,
-                            margin: [0, 5, 0, 20]
-                        });
-                    }
-                    
-                    // Добавляем текст прописей
-                    const lines = text.split('\n');
-                    
-                    // Выполняем генерацию PDF
-                    console.log('Начинаем генерацию PDF');
-                    setTimeout(() => {
-                        try {
-                            pdfMake.createPdf(docDefinition).open();
-                            console.log('PDF открыт для предпросмотра');
-                        } catch (error) {
-                            console.error('Ошибка при генерации PDF:', error);
-                            showError('Ошибка при генерации PDF: ' + error.message);
-                        } finally {
-                            setLoading(false);
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        if (blob) {
+                            const url = URL.createObjectURL(blob);
+                            window.open(url, '_blank');
                         }
-                    }, 100);
-                    
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при предпросмотре:', error);
+                        showError(`Не удалось создать предпросмотр. ${error.message}`);
+                        
+                        // Пробуем альтернативный путь
+                        window.open('/api/simple-pdf', '_blank');
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
                 } catch (error) {
                     console.error('Общая ошибка:', error);
-                    showError('Произошла ошибка: ' + error.message);
+                    showError(`Ошибка: ${error.message}`);
                     setLoading(false);
+                    
+                    // Пробуем альтернативный путь
+                    window.open('/api/simple-pdf', '_blank');
                 }
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
-                console.log('Нажата кнопка скачивания PDF');
                 try {
-                    // Проверка наличия библиотеки
-                    if (typeof pdfMake === 'undefined') {
-                        showError('Библиотека pdfMake не загружена');
-                        return;
-                    }
-                    
                     setLoading(true);
+                    const formData = collectFormData();
                     
-                    // Параметры документа (аналогично предпросмотру)
-                    const docDefinition = {
-                        pageSize: 'A4', 
-                        content: [{
-                            text: 'Простой PDF для теста',
-                            bold: true
-                        }]
-                    };
-                    
-                    // Генерация без дополнительных параметров для максимального упрощения
-                    setTimeout(() => {
-                        try {
-                            pdfMake.createPdf(docDefinition).download('propisi_test.pdf');
-                            console.log('PDF скачивание запущено');
-                        } catch (error) {
-                            console.error('Ошибка при скачивании PDF:', error);
-                            showError('Не удалось создать PDF для скачивания: ' + error.message);
-                        } finally {
-                            setLoading(false);
+                    fetch('/api/generate-pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData)
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 500) {
+                                // Пробуем альтернативный путь
+                                window.location = '/api/simple-pdf';
+                                showError("Ошибка на сервере. Загружаем тестовый PDF.");
+                            } else {
+                                throw new Error(`Ошибка: ${response.status}`);
+                            }
+                            return;
                         }
-                    }, 100);
-                    
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        if (blob) {
+                            // Создаем ссылку для скачивания
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при скачивании:', error);
+                        showError(`Не удалось скачать PDF. ${error.message}`);
+                        
+                        // Пробуем альтернативный путь
+                        window.location = '/api/simple-pdf';
+                    })
+                    .finally(() => {
+                        setLoading(false);
+                    });
                 } catch (error) {
-                    console.error('Общая ошибка скачивания:', error);
-                    showError('Ошибка при подготовке PDF: ' + error.message);
+                    console.error('Общая ошибка:', error);
+                    showError(`Ошибка: ${error.message}`);
                     setLoading(false);
+                    
+                    // Пробуем альтернативный путь
+                    window.location = '/api/simple-pdf';
                 }
             });
         });
