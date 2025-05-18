@@ -9,7 +9,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Библиотека pdfmake для генерации PDF -->
+    <!-- Библиотека pdfmake -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
@@ -275,10 +275,118 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Генерация PDF
-            function generatePDF(formData, isPreview = false) {
+            // Проверка, поддерживается ли Fetch API
+            const isFetchSupported = 'fetch' in window;
+            
+            // Функция для генерации PDF через API с поддержкой старых браузеров
+            async function generatePDFViaAPI(formData, isPreview = false) {
                 try {
                     setLoading(true);
+                    console.log('Отправка запроса на API для генерации PDF');
+                    
+                    // URL API для генерации PDF (можно настроить в зависимости от окружения)
+                    const apiUrl = '/api/generate-pdf';
+                    
+                    // Добавляем информацию о предпросмотре в данные запроса
+                    const requestData = {
+                        ...formData,
+                        preview: isPreview
+                    };
+                    
+                    console.log('Отправляемые данные:', JSON.stringify(requestData));
+                    
+                    let response;
+                    
+                    if (isFetchSupported) {
+                        // Используем Fetch API для современных браузеров
+                        response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('Ошибка API:', response.status, errorText);
+                            throw new Error(`Ошибка сервера: ${response.status}. ${errorText || ''}`);
+                        }
+                        
+                        // Получаем PDF как blob
+                        const blob = await response.blob();
+                        
+                        // Создаем URL для blob
+                        const blobUrl = URL.createObjectURL(blob);
+                        
+                        if (isPreview) {
+                            // Открываем в новом окне для предпросмотра
+                            window.open(blobUrl, '_blank');
+                        } else {
+                            // Создаем ссылку для скачивания
+                            const link = document.createElement('a');
+                            link.href = blobUrl;
+                            link.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }
+                    } else {
+                        // Используем XMLHttpRequest для старых браузеров
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', apiUrl, true);
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.responseType = 'blob';
+                        
+                        xhr.onload = function() {
+                            if (this.status === 200) {
+                                const blob = new Blob([this.response], { type: 'application/pdf' });
+                                const blobUrl = URL.createObjectURL(blob);
+                                
+                                if (isPreview) {
+                                    // Открываем в новом окне для предпросмотра
+                                    window.open(blobUrl, '_blank');
+                                } else {
+                                    // Создаем ссылку для скачивания
+                                    const link = document.createElement('a');
+                                    link.href = blobUrl;
+                                    link.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                }
+                            } else {
+                                console.error('Ошибка XMLHttpRequest:', this.status, this.statusText);
+                                throw new Error(`Ошибка сервера: ${this.status}. ${this.statusText || ''}`);
+                            }
+                        };
+                        
+                        xhr.onerror = function() {
+                            console.error('Ошибка сети при запросе');
+                            throw new Error('Ошибка сети при запросе к серверу.');
+                        };
+                        
+                        xhr.send(JSON.stringify(requestData));
+                    }
+                    
+                    setLoading(false);
+                    return true;
+                } catch (error) {
+                    console.error('Ошибка при генерации PDF через API:', error);
+                    showError(`Ошибка при генерации PDF: ${error.message}`);
+                    setLoading(false);
+                    
+                    // Пробуем запасной вариант с генерацией на клиенте
+                    console.log('Переключение на клиентскую генерацию PDF');
+                    return generatePDFClient(formData, isPreview);
+                }
+            }
+            
+            // Генерация PDF с pdfmake
+            function generatePDFClient(formData, isPreview = false) {
+                try {
+                    setLoading(true);
+                    console.log('Начало клиентской генерации PDF');
                     
                     // Проверяем библиотеку pdfMake
                     if (typeof pdfMake === 'undefined') {
@@ -346,25 +454,32 @@
                             break;
                     }
                     
-                    // Создаем разметку страницы и контент
+                    // Создаем разметку страницы и контент в зависимости от выбранных параметров
                     const layout = createPageLayout(formData.page_layout, pageOrientation);
                     docDefinition.content.push(layout);
                     
-                    // Добавляем текст
+                    // Добавляем текст в зависимости от способа заполнения
                     const textContent = createTextContent(formData.text, formData.fill_type, textColor);
                     docDefinition.content.push(textContent);
                     
+                    console.log('PDF документ подготовлен, запуск генерации...');
+                    
                     // Генерируем PDF
                     setTimeout(() => {
-                        setLoading(false);
-                        
-                        if (isPreview) {
-                            // Открываем в новом окне для предпросмотра
-                            pdfMake.createPdf(docDefinition).open();
-                        } else {
-                            // Скачиваем файл
-                            pdfMake.createPdf(docDefinition).download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
+                        try {
+                            if (isPreview) {
+                                // Открываем в новом окне для предпросмотра
+                                pdfMake.createPdf(docDefinition).open();
+                            } else {
+                                // Скачиваем файл
+                                pdfMake.createPdf(docDefinition).download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
+                            }
+                            console.log('PDF успешно сгенерирован');
+                        } catch (innerError) {
+                            console.error('Ошибка при финальной генерации PDF:', innerError);
+                            showError(`Ошибка при создании PDF: ${innerError.message}`);
                         }
+                        setLoading(false);
                     }, 1000);
                     
                     return true;
@@ -576,13 +691,35 @@
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDF(formData, true);
+                
+                // Сначала пробуем через API
+                try {
+                    generatePDFViaAPI(formData, true).catch(error => {
+                        console.error('Ошибка API для предпросмотра:', error);
+                        // В случае ошибки API используем клиентскую генерацию
+                        generatePDFClient(formData, true);
+                    });
+                } catch (error) {
+                    console.error('Общая ошибка предпросмотра:', error);
+                    generatePDFClient(formData, true);
+                }
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDF(formData, false);
+                
+                // Сначала пробуем через API
+                try {
+                    generatePDFViaAPI(formData, false).catch(error => {
+                        console.error('Ошибка API для скачивания:', error);
+                        // В случае ошибки API используем клиентскую генерацию
+                        generatePDFClient(formData, false);
+                    });
+                } catch (error) {
+                    console.error('Общая ошибка скачивания:', error);
+                    generatePDFClient(formData, false);
+                }
             });
         });
     </script>
