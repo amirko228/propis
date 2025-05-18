@@ -268,20 +268,25 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Генерация PDF
+            // Генерация PDF с использованием pdfmake
             function generatePDF(formData, isPreview = false) {
                 try {
                     setLoading(true);
                     
-                    // Проверяем библиотеку pdfMake
+                    // Проверяем наличие библиотеки pdfmake
                     if (typeof pdfMake === 'undefined') {
-                        showError('Библиотека pdfMake не загружена. Пожалуйста, обновите страницу.');
+                        showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
                         setLoading(false);
                         return false;
                     }
                     
                     // Определяем ориентацию
                     const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
+                    
+                    // Определяем толщину и цвет линий
+                    const lineWidth = 0.5;
+                    const lineColor = '#aaaaaa';
+                    const middleLineColor = '#888888';
                     
                     // Определяем цвет текста
                     let textColor = '#000000';

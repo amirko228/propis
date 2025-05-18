@@ -1,0 +1,49 @@
+# Виртуальное окружение Python
+venv/
+env/
+.env/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Временные файлы
+.DS_Store
+.cache/
+*.log
+tmp/
+temp/
+*.temp
+*.tmp
+
+# Локальные конфигурации
+.idea/
+.vscode/
+*.sublime-*
+
+# Тестовые данные и файлы
+test_data/
+tests/
+test_output/
+
+# Git файлы
+.git/
+.github/
+.gitignore
+
+# Файлы разработки
+*.swp
+*.swo
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Игнорируем README и другие документационные файлы (они не нужны в деплое)
+# Но оставляем README.md для отображения на Vercel
+# README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE.md 

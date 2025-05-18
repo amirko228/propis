@@ -57,7 +57,7 @@ class PropisiRequest(BaseModel):
 if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
 else:
-    temp_dir = "temp"
+temp_dir = "temp"
 os.makedirs(temp_dir, exist_ok=True)
 
 # Проверяем возможность записи во временную директорию
@@ -98,7 +98,7 @@ async def serve_static_index():
     # Проверяем, существует ли файл
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    else:
+        else:
         # Если файла нет, возвращаем простую страницу
         return HTMLResponse("""
         <html>
@@ -483,7 +483,7 @@ async def generate_pdf(request: Request):
         # Определяем размер страницы
         if page_orientation == "landscape":
             pagesize = landscape(A4)
-        else:
+            else:
             pagesize = A4
         
         # Создаем PDF
@@ -668,15 +668,15 @@ async def simplified_preview(request: Request):
         c.drawString(100, height - 180, f"Temp dir: {temp_dir}")
         
         # Сохраняем PDF в буфер
-        c.save()
-        
+    c.save()
+    
         # Получаем содержимое буфера
         buffer.seek(0)
-        
+    
         # Возвращаем PDF напрямую
         return Response(
             content=buffer.read(),
-            media_type="application/pdf",
+        media_type="application/pdf", 
             headers={"Content-Disposition": "inline; filename=test.pdf"}
         )
     except Exception as e:
