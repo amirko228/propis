@@ -21,7 +21,16 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
 import datetime
+import sys
 
+# Начальные настройки для отладки
+print("Инициализация приложения на", "Vercel" if os.environ.get('VERCEL', False) else "локальном сервере")
+
+# Проверяем окружение и сразу устанавливаем переменную для Vercel
+if 'VERCEL' not in os.environ and any(k.startswith('VERCEL_') for k in os.environ.keys()):
+    print("Обнаружены переменные VERCEL_, но VERCEL не установлена. Устанавливаем VERCEL=1")
+    os.environ['VERCEL'] = '1'
+    
 app = FastAPI(title="Генератор прописей")
 
 # Настройка CORS - максимально открытая для тестирования
@@ -613,6 +622,83 @@ async def generate_pdf(request: Request):
             content={"status": "error", "message": error_message, "error_details": str(e), "error_type": error_type}
         )
 
+# Добавим простой маршрут для проверки, что функция работает без работы с PDF
+@app.get("/api/debug-status")
+async def debug_status():
+    """
+    Простой маршрут для проверки работоспособности API
+    """
+    # Собираем информацию об окружении
+    env_info = {
+        "is_vercel": os.environ.get('VERCEL', False),
+        "temp_dir": temp_dir,
+        "temp_dir_exists": os.path.exists(temp_dir),
+        "temp_dir_writable": os.access(temp_dir, os.W_OK) if os.path.exists(temp_dir) else False,
+        "python_version": ".".join(map(str, sys.version_info[:3])),
+        "reportlab_version": getattr(canvas, "__version__", "unknown")
+    }
+    
+    return {"status": "ok", "message": "API работает", "env_info": env_info}
+
+# Упрощенная функция для генерации PDF без использования файловой системы
+@app.post("/api/simplified-preview")
+async def simplified_preview(request: Request):
+    """
+    Упрощенная версия API для предпросмотра - минимальный PDF
+    """
+    try:
+        # Создаем буфер в памяти для PDF
+        buffer = io.BytesIO()
+        
+        # Создаем простой PDF
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # Рисуем простой текст
+        c.setFont("Helvetica", 16)
+        c.drawString(100, height - 100, "Тестовый PDF")
+        c.setFont("Helvetica", 12)
+        c.drawString(100, height - 120, "Тестовая строка для проверки работы на Vercel")
+        
+        # Добавляем текущую дату и время
+        c.drawString(100, height - 140, f"Дата и время: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Добавляем информацию об окружении
+        c.drawString(100, height - 160, f"Vercel: {os.environ.get('VERCEL', False)}")
+        c.drawString(100, height - 180, f"Temp dir: {temp_dir}")
+        
+        # Сохраняем PDF в буфер
+        c.save()
+        
+        # Получаем содержимое буфера
+        buffer.seek(0)
+        
+        # Возвращаем PDF напрямую
+        return Response(
+            content=buffer.read(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=test.pdf"}
+        )
+    except Exception as e:
+        # Подробная информация об ошибке
+        error_type = type(e).__name__
+        error_message = f"Ошибка при создании простого PDF: {str(e)}"
+        import traceback
+        traceback_str = traceback.format_exc()
+        
+        print(error_message)
+        print(traceback_str)
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "message": error_message, 
+                "error_type": error_type, 
+                "traceback": traceback_str
+            }
+        )
+
 # Удаление временных файлов при выключении сервера
 @app.on_event("shutdown")
 def shutdown_event():
@@ -637,6 +723,48 @@ def shutdown_event():
                 os.remove(f)
             except:
                 pass
+
+# Специальные настройки для Vercel
+if os.environ.get('VERCEL', False):
+    print("Применяем специальные настройки для Vercel")
+    # FastAPI не поддерживает эти атрибуты напрямую, используем middleware для ограничений
+
+# Добавляю еще более простую функцию генерации PDF
+@app.post("/api/basic-pdf")
+async def basic_pdf():
+    """
+    Максимально простая функция генерации PDF 
+    без лишних параметров и сложной логики
+    """
+    try:
+        # Буфер в памяти
+        buffer = io.BytesIO()
+        
+        # Самый простой PDF
+        c = canvas.Canvas(buffer, pagesize=(300, 200))
+        c.drawString(10, 180, "Простой тестовый PDF")
+        c.drawString(10, 160, f"Время: {datetime.datetime.now()}")
+        c.drawString(10, 140, f"Vercel: {os.environ.get('VERCEL', 'нет')}")
+        c.save()
+        
+        # Возвращаем результат
+        buffer.seek(0)
+        
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=basic.pdf"}
+        )
+    except Exception as e:
+        error_message = f"Ошибка при создании базового PDF: {type(e).__name__} - {str(e)}"
+        print(error_message)
+        import traceback
+        print(traceback.format_exc())
+        
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": error_message}
+        )
 
 if __name__ == "__main__":
     import uvicorn

@@ -191,6 +191,8 @@
     <div class="section">
         <button class="preview" id="preview-button">Предпросмотр</button>
         <button id="generate-button">Генерация...</button>
+        <button id="test-button" style="background-color: #3ca33c;">Тестовая генерация</button>
+        <button id="basic-pdf-button" style="background-color: #3ca33c;">Базовый PDF</button>
     </div>
     
     <!-- Модальное окно подтверждения -->
@@ -205,6 +207,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             const previewButton = document.getElementById('preview-button');
             const generateButton = document.getElementById('generate-button');
+            const testButton = document.getElementById('test-button');
+            const basicPdfButton = document.getElementById('basic-pdf-button');
             const errorBox = document.getElementById('error-box');
             const confirmationModal = document.getElementById('confirmation-modal');
             const modalOkButton = document.getElementById('modal-ok');
@@ -246,6 +250,71 @@
             // Обработчик кнопки OK в модальном окне
             modalOkButton.addEventListener('click', function() {
                 confirmationModal.style.display = 'none';
+            });
+            
+            // Обработчик тестовой кнопки
+            testButton.addEventListener('click', function() {
+                // Показываем статус
+                showModal('Отправка тестового запроса...');
+                
+                // Сначала проверяем базовый статус API
+                fetch('/api/debug-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Статус API:', data);
+                        showModal(`API статус: ${data.status}\nEnv: ${JSON.stringify(data.env_info)}`);
+                        
+                        // Затем пробуем упрощенную функцию генерации PDF
+                        setTimeout(() => {
+                            fetch('/api/simplified-preview', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({})
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    if (!response.headers.get('content-type')?.includes('application/json')) {
+                                        return response.text().then(text => {
+                                            throw new Error(`Ошибка сервера: ${response.status} - ${text}`);
+                                        });
+                                    }
+                                    return response.json().then(errorData => {
+                                        throw new Error(JSON.stringify(errorData) || `Ошибка сервера: ${response.status}`);
+                                    });
+                                }
+                                
+                                const contentType = response.headers.get('content-type');
+                                if (contentType && contentType.includes('application/pdf')) {
+                                    return response.blob().then(blob => {
+                                        const url = URL.createObjectURL(blob);
+                                        window.open(url, '_blank');
+                                        return { status: 'success', direct_pdf: true };
+                                    });
+                                }
+                                
+                                return response.json();
+                            })
+                            .then(data => {
+                                if (data.direct_pdf) {
+                                    showModal('Тестовый PDF успешно открыт в новом окне!');
+                                    return;
+                                }
+                                
+                                showModal(`Результат: ${JSON.stringify(data)}`);
+                            })
+                            .catch(error => {
+                                console.error('Ошибка:', error);
+                                showError('Ошибка: ' + error.message);
+                                showModal('Ошибка при тестовой генерации PDF: ' + error.message);
+                            });
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        console.error('Ошибка статуса API:', error);
+                        showModal('Ошибка при проверке статуса API: ' + error.message);
+                    });
             });
             
             // Обработчик кнопки предпросмотра
@@ -381,6 +450,55 @@
                     showError('Ошибка: ' + error.message);
                     // Показываем информативное сообщение
                     showModal('Ошибка при генерации. Пожалуйста, проверьте ваши данные и попробуйте снова.');
+                });
+            });
+            
+            // Обработчик для базового PDF
+            basicPdfButton.addEventListener('click', function() {
+                showModal('Запрос базового PDF...');
+                
+                fetch('/api/basic-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        if (!response.headers.get('content-type')?.includes('application/json')) {
+                            return response.text().then(text => {
+                                throw new Error(`Ошибка сервера: ${response.status} - ${text}`);
+                            });
+                        }
+                        return response.json().then(errorData => {
+                            throw new Error(JSON.stringify(errorData) || `Ошибка сервера: ${response.status}`);
+                        });
+                    }
+                    
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/pdf')) {
+                        return response.blob().then(blob => {
+                            const url = URL.createObjectURL(blob);
+                            window.open(url, '_blank');
+                            return { status: 'success', direct_pdf: true };
+                        });
+                    }
+                    
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.direct_pdf) {
+                        showModal('Базовый PDF успешно открыт!');
+                        return;
+                    }
+                    
+                    showModal(`Результат: ${JSON.stringify(data)}`);
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showError('Ошибка: ' + error.message);
+                    showModal('Ошибка при генерации базового PDF: ' + error.message);
                 });
             });
         });
