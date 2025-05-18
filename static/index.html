@@ -3,52 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Генератор прописей - ПЕРЕНАПРАВЛЕНИЕ</title>
-    <meta http-equiv="refresh" content="0; url=/pdf-generator.html">
+    <title>Генератор прописей</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
-            margin: 100px auto;
+            margin: 0 auto;
             padding: 20px;
-            text-align: center;
             line-height: 1.6;
+            background-color: #f5f5f5;
         }
-        .redirect-box {
-            border: 2px solid #4CAF50;
-            background-color: #e8f5e9;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
+        h1, h2 {
             color: #333;
         }
-        .big-button {
-            display: inline-block;
-            background-color: #4CAF50;
+        .header {
+            background-color: #3f51b5;
             color: white;
-            font-size: 18px;
-            padding: 15px 30px;
-            margin: 20px 0;
-            border-radius: 30px;
-            text-decoration: none;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            transition: all 0.3s;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
         }
-        .big-button:hover {
-            background-color: #388E3C;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .info {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        a.button {
+            display: inline-block;
+            background-color: #4a639e;
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            margin: 10px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+        a.button:hover {
+            background-color: #374a77;
+        }
+        a.emergency {
+            background-color: #ff4b4b;
+        }
+        a.emergency:hover {
+            background-color: #e04141;
+        }
+        .actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .important {
+            color: #ff4b4b;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="redirect-box">
-        <h1>Перенаправление на новую версию</h1>
-        <p>Мы устранили ошибку 500 и переехали на новую версию генератора прописей.</p>
-        <p>Вы будете автоматически перенаправлены через несколько секунд.</p>
-        <a href="/pdf-generator.html" class="big-button">ПЕРЕЙТИ НА НОВУЮ ВЕРСИЮ</a>
+    <div class="header">
+        <h1>Генератор прописей</h1>
+        <p>Создавайте красивые прописи для обучения письму</p>
+    </div>
+    
+    <div class="section">
+        <h2>Добро пожаловать!</h2>
+        <p>
+            С помощью этого инструмента вы можете создавать прописи с разными типами разметки:
+        </p>
+        <ul>
+            <li>Обычные линии</li>
+            <li>Линии с наклоном</li>
+            <li>Клетки</li>
+        </ul>
+        <p>
+            Вы можете выбрать ориентацию страницы, стиль шрифта и способ заполнения.
+        </p>
+    </div>
+    
+    <div class="section">
+        <h2>Начать работу</h2>
+        <div class="actions">
+            <a href="/static/pdf-generator.html" class="button">Открыть генератор прописей</a>
+        </div>
+        
+        <div class="info">
+            <p class="important">Если основной генератор не работает, воспользуйтесь аварийным режимом:</p>
+            <div class="actions">
+                <a href="/static/pdf-fallback.html" class="button emergency">Аварийный режим (без сервера)</a>
+            </div>
+            <p>
+                В аварийном режиме все операции выполняются внутри браузера, без обращения к серверу.
+                Это может помочь, если на сервере возникают ошибки.
+            </p>
+        </div>
     </div>
 </body>
 </html> 
