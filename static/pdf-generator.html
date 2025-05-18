@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор прописей - Новая версия</title>
+    <!-- Запрет кеширования -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <!-- Библиотека jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .header {
+            background-color: #3f51b5;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .options-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        button {
+            background-color: #4a639e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 8px 4px;
+            cursor: pointer;
+            border-radius: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #374a77;
+        }
+        button.preview {
+            background-color: #f44336;
+        }
+        button.preview:hover {
+            background-color: #d32f2f;
+        }
+        .error-message {
+            color: #f44336;
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #ffebee;
+            display: none;
+            margin-bottom: 15px;
+        }
+        .info {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        input[type="radio"] {
+            margin-right: 8px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+            display: none;
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3f51b5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Генератор прописей</h1>
+        <p>Создавайте красивые прописи для обучения письму</p>
+    </div>
+    
+    <div class="error-message" id="error-box"></div>
+    
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Создание PDF...</p>
+    </div>
+    
+    <div class="section">
+        <h2>Вариант заполнения:</h2>
+        <div class="options-group">
+            <label>
+                <input type="radio" name="fill-type" value="all" id="fill-all">
+                Заполнить все самостоятельно
+            </label>
+            <label>
+                <input type="radio" name="fill-type" value="first_letter" id="fill-first" checked>
+                Размножить первую букву в каждой строке
+            </label>
+            <label>
+                <input type="radio" name="fill-type" value="one_line" id="fill-line">
+                Размножить одну строку на всю страницу
+            </label>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Текст прописи:</h2>
+        <textarea id="text-content">а а а а а а а а а а а
+б б б б б б б б б б б
+в в в в в в в в в в в</textarea>
+        <div class="info">Пустые строки останутся пустыми на странице, а длинные перенесутся автоматически</div>
+    </div>
+    
+    <div class="section">
+        <h2>Дополнительные настройки:</h2>
+        <div class="options-group">
+            <label>Разметка страницы:</label>
+            <label>
+                <input type="radio" name="page-layout" value="lines" checked>
+                Линии
+            </label>
+            <label>
+                <input type="radio" name="page-layout" value="lines_oblique">
+                Линии с наклоном
+            </label>
+            <label>
+                <input type="radio" name="page-layout" value="cells">
+                Клетки
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label>Ориентация страницы:</label>
+            <label>
+                <input type="radio" name="page-orientation" value="portrait" checked>
+                Портретная
+            </label>
+            <label>
+                <input type="radio" name="page-orientation" value="landscape">
+                Альбомная
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label>Стиль шрифта:</label>
+            <label>
+                <input type="radio" name="font-type" value="black" checked>
+                Черный
+            </label>
+            <label>
+                <input type="radio" name="font-type" value="gray">
+                Серый
+            </label>
+            <label>
+                <input type="radio" name="font-type" value="punktir">
+                Пунктирный
+            </label>
+        </div>
+        
+        <div class="options-group">
+            <label for="student-name">Имя ученика (необязательно):</label>
+            <input type="text" id="student-name" placeholder="Введите имя ученика">
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="actions">
+            <button class="preview" id="preview-button">Предпросмотр PDF</button>
+            <button id="generate-button">Скачать PDF</button>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const previewButton = document.getElementById('preview-button');
+            const generateButton = document.getElementById('generate-button');
+            const errorBox = document.getElementById('error-box');
+            const loadingElement = document.getElementById('loading');
+            
+            // Проверка загрузки jsPDF
+            if (typeof window.jspdf === 'undefined') {
+                showError('Библиотека jsPDF не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
+                console.error('jsPDF не загружена');
+            }
+            
+            // Функция для получения выбранного значения радиокнопки
+            function getSelectedRadioValue(name) {
+                const radio = document.querySelector(`input[name="${name}"]:checked`);
+                return radio ? radio.value : '';
+            }
+            
+            // Функция для сбора данных формы
+            function collectFormData() {
+                return {
+                    task: 'practice',
+                    fill_type: getSelectedRadioValue('fill-type'),
+                    text: document.getElementById('text-content').value,
+                    page_layout: getSelectedRadioValue('page-layout'),
+                    font_type: getSelectedRadioValue('font-type'),
+                    page_orientation: getSelectedRadioValue('page-orientation'),
+                    student_name: document.getElementById('student-name').value
+                };
+            }
+            
+            // Функция для показа ошибки
+            function showError(message) {
+                errorBox.textContent = message;
+                errorBox.style.display = 'block';
+                setTimeout(() => {
+                    errorBox.style.display = 'none';
+                }, 7000);
+            }
+            
+            // Показать/скрыть индикатор загрузки
+            function setLoading(isLoading) {
+                loadingElement.style.display = isLoading ? 'block' : 'none';
+            }
+            
+            // Генерация PDF на клиенте
+            function generatePDFClient(formData, isPreview = false) {
+                try {
+                    setLoading(true);
+                    
+                    // Проверяем библиотеку jsPDF
+                    if (typeof window.jspdf === 'undefined') {
+                        showError('Библиотека jsPDF не загружена. Пожалуйста, обновите страницу.');
+                        setLoading(false);
+                        return false;
+                    }
+                    
+                    const { jsPDF } = window.jspdf;
+                    
+                    // Создаем PDF документ
+                    const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
+                    const doc = new jsPDF({ orientation: orientation, unit: 'mm' });
+                    
+                    // Ширина и высота страницы
+                    const pageWidth = orientation === 'landscape' ? 297 : 210;
+                    const pageHeight = orientation === 'landscape' ? 210 : 297;
+                    
+                    // Отступы
+                    const marginLeft = 20;
+                    const marginTop = 20;
+                    const contentWidth = pageWidth - 2 * marginLeft;
+                    
+                    // Добавляем заголовок
+                    doc.setFontSize(16);
+                    doc.text('Пропись для практики письма', marginLeft, marginTop);
+                    
+                    // Если это предпросмотр, добавляем водяной знак
+                    if (isPreview) {
+                        doc.setFontSize(12);
+                        doc.setTextColor(255, 0, 0);
+                        doc.text('ПРЕДПРОСМОТР', pageWidth - 50, 15);
+                        doc.setTextColor(0, 0, 0);
+                    }
+                    
+                    // Добавляем имя ученика если есть
+                    if (formData.student_name) {
+                        doc.setFontSize(12);
+                        doc.text(`Ученик: ${formData.student_name}`, marginLeft, marginTop + 10);
+                    }
+                    
+                    // Добавляем дату
+                    const today = new Date().toLocaleDateString('ru-RU');
+                    doc.setFontSize(10);
+                    doc.text(`Дата: ${today}`, pageWidth - 50, marginTop);
+                    
+                    // Настраиваем стиль шрифта
+                    doc.setFontSize(12);
+                    switch (formData.font_type) {
+                        case 'gray':
+                            doc.setTextColor(128, 128, 128); // Серый
+                            break;
+                        case 'punktir':
+                            doc.setTextColor(180, 180, 180); // Светло-серый
+                            break;
+                        default:
+                            doc.setTextColor(0, 0, 0); // Черный
+                    }
+                    
+                    // Начальная позиция для текста
+                    let startY = marginTop + (formData.student_name ? 20 : 10);
+                    
+                    // Рисуем разметку страницы (линии или клетки)
+                    switch (formData.page_layout) {
+                        case 'cells':
+                            // Рисуем клетки
+                            drawCells(doc, marginLeft, startY, contentWidth, pageHeight - startY - 20);
+                            break;
+                        case 'lines_oblique':
+                            // Рисуем линии с наклоном
+                            drawLinesWithOblique(doc, marginLeft, startY, contentWidth, pageHeight - startY - 20);
+                            break;
+                        default:
+                            // Обычные линии
+                            drawLines(doc, marginLeft, startY, contentWidth, pageHeight - startY - 20);
+                    }
+                    
+                    // Добавляем текст
+                    if (formData.text) {
+                        const lines = formData.text.split('\n');
+                        const lineHeight = 10; // Высота строки в мм
+                        
+                        let y = startY + 5; // Начальная Y-позиция для текста
+                        
+                        // Выводим текст в зависимости от способа заполнения
+                        if (formData.fill_type === 'first_letter') {
+                            // Размножаем первую букву в каждой строке
+                            for (let i = 0; i < lines.length; i++) {
+                                if (!lines[i].trim()) continue; // Пропускаем пустые строки
+                                
+                                const firstChar = lines[i][0] || '';
+                                if (firstChar) {
+                                    const repeatedText = firstChar.repeat(30); // Примерное количество символов в строке
+                                    doc.text(repeatedText, marginLeft + 5, y);
+                                }
+                                y += lineHeight * 2; // Двойной интервал между строками
+                                
+                                // Проверяем, не вышли ли за пределы страницы
+                                if (y > pageHeight - 20) break;
+                            }
+                        } else if (formData.fill_type === 'one_line') {
+                            // Размножаем первую строку на всю страницу
+                            if (lines[0] && lines[0].trim()) {
+                                const firstLine = lines[0].trim();
+                                // Повторяем первую строку на всю страницу
+                                while (y < pageHeight - 20) {
+                                    doc.text(firstLine, marginLeft + 5, y);
+                                    y += lineHeight * 2;
+                                }
+                            }
+                        } else {
+                            // Заполняем все строки как есть
+                            for (let i = 0; i < lines.length; i++) {
+                                if (!lines[i].trim()) continue; // Пропускаем пустые строки
+                                
+                                doc.text(lines[i], marginLeft + 5, y);
+                                y += lineHeight * 2;
+                                
+                                // Проверяем, не вышли ли за пределы страницы
+                                if (y > pageHeight - 20) break;
+                            }
+                        }
+                    }
+                    
+                    // Открываем PDF для предпросмотра или скачивания
+                    setTimeout(() => {
+                        setLoading(false);
+                        
+                        if (isPreview) {
+                            // Открываем в новом окне для предпросмотра
+                            const pdfBlob = doc.output('blob');
+                            const blobUrl = URL.createObjectURL(pdfBlob);
+                            window.open(blobUrl, '_blank');
+                        } else {
+                            // Скачиваем файл
+                            doc.save(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
+                        }
+                    }, 1000);
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Ошибка при генерации PDF на клиенте:', error);
+                    showError(`Ошибка при генерации PDF: ${error.message}`);
+                    setLoading(false);
+                    return false;
+                }
+            }
+            
+            // Функция для рисования обычных линий
+            function drawLines(doc, x, y, width, height) {
+                const lineHeight = 10; // мм
+                const lineGap = 0;
+                const groupHeight = lineHeight * 2;
+                
+                // Рисуем группы линий (по 3 линии в группе)
+                let currentY = y;
+                while (currentY < y + height) {
+                    // Серым цветом
+                    doc.setDrawColor(180, 180, 180);
+                    
+                    // Верхняя линия (светлая)
+                    doc.setDrawColor(200, 200, 200);
+                    doc.line(x, currentY, x + width, currentY);
+                    
+                    // Средняя линия (темнее)
+                    doc.setDrawColor(150, 150, 150);
+                    doc.line(x, currentY + lineHeight, x + width, currentY + lineHeight);
+                    
+                    // Нижняя линия (светлая)
+                    doc.setDrawColor(200, 200, 200);
+                    doc.line(x, currentY + lineHeight * 2, x + width, currentY + lineHeight * 2);
+                    
+                    currentY += groupHeight + lineGap;
+                }
+            }
+            
+            // Функция для рисования линий с наклоном
+            function drawLinesWithOblique(doc, x, y, width, height) {
+                // Сначала рисуем обычные линии
+                drawLines(doc, x, y, width, height);
+                
+                // Затем добавляем наклонные линии
+                const step = 10; // Шаг между наклонными линиями
+                
+                // Рисуем наклонные линии
+                doc.setDrawColor(220, 220, 220);
+                
+                // Определяем угол наклона (примерно 60 градусов)
+                for (let offset = 0; offset < width + height; offset += step) {
+                    // Начальная и конечная точки для наклонной линии
+                    let x1 = x + offset;
+                    let y1 = y;
+                    
+                    if (x1 > x + width) {
+                        // Если вышли за правую границу, начинаем с правой границы и уходим вниз
+                        const excess = x1 - (x + width);
+                        x1 = x + width;
+                        y1 = y + excess;
+                    }
+                    
+                    let x2 = x1 - height;
+                    let y2 = y1 + height;
+                    
+                    if (x2 < x) {
+                        // Если вышли за левую границу, начинаем с левой границы и уходим вниз
+                        const excess = x - x2;
+                        x2 = x;
+                        y2 = y2 - excess;
+                    }
+                    
+                    // Рисуем только если линия видима
+                    if (y2 >= y && y1 <= y + height) {
+                        doc.line(x1, y1, x2, y2);
+                    }
+                }
+            }
+            
+            // Функция для рисования клеток
+            function drawCells(doc, x, y, width, height) {
+                const cellSize = 10; // мм
+                const rows = Math.floor(height / cellSize);
+                const cols = Math.floor(width / cellSize);
+                
+                // Рисуем горизонтальные линии
+                doc.setDrawColor(180, 180, 180);
+                for (let i = 0; i <= rows; i++) {
+                    doc.line(x, y + i * cellSize, x + cols * cellSize, y + i * cellSize);
+                }
+                
+                // Рисуем вертикальные линии
+                for (let i = 0; i <= cols; i++) {
+                    doc.line(x + i * cellSize, y, x + i * cellSize, y + rows * cellSize);
+                }
+            }
+            
+            // Обработчик кнопки предпросмотра
+            previewButton.addEventListener('click', function() {
+                const formData = collectFormData();
+                generatePDFClient(formData, true);
+            });
+            
+            // Обработчик кнопки генерации
+            generateButton.addEventListener('click', function() {
+                const formData = collectFormData();
+                generatePDFClient(formData, false);
+            });
+        });
+    </script>
+</body>
+</html> 
