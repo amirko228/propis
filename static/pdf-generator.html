@@ -325,8 +325,8 @@
                     
                     // Определяем URL запроса
                     const apiUrl = isPreview ? 
-                        'https://propisi-backend.vercel.app/api/preview' : 
-                        'https://propisi-backend.vercel.app/api/generate-pdf';
+                        '/api/preview' : 
+                        '/api/generate-pdf';
                     
                     // Делаем запрос на сервер
                     const response = await fetch(apiUrl, {
