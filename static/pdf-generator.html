@@ -236,12 +236,6 @@
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
             
-            // Проверка загрузки pdfMake
-            if (typeof pdfMake === 'undefined') {
-                showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
-                console.error('pdfMake не загружена');
-            }
-            
             // Функция для получения выбранного значения радиокнопки
             function getSelectedRadioValue(name) {
                 const radio = document.querySelector(`input[name="${name}"]:checked`);
@@ -274,8 +268,8 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Генерация PDF на клиенте
-            function generatePDFClient(formData, isPreview = false) {
+            // Генерация PDF
+            function generatePDF(formData, isPreview = false) {
                 try {
                     setLoading(true);
                     
@@ -411,7 +405,7 @@
                     
                     return true;
                 } catch (error) {
-                    console.error('Ошибка при генерации PDF на клиенте:', error);
+                    console.error('Ошибка при генерации PDF:', error);
                     showError(`Ошибка при генерации PDF: ${error.message}`);
                     setLoading(false);
                     return false;
@@ -421,13 +415,13 @@
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDFClient(formData, true);
+                generatePDF(formData, true);
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                generatePDFClient(formData, false);
+                generatePDF(formData, false);
             });
         });
     </script>
