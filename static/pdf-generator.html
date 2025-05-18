@@ -229,27 +229,32 @@
             <button id="test-button" onclick="testPdf()">Проверить PDF</button>
         </div>
         <div class="info" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
-            Если генерация не работает, <a href="/api/simple-pdf" target="_blank">проверьте базовый PDF</a>
+            Если генерация не работает, <a href="#" onclick="testPdf(); return false;">проверьте тестовый PDF</a>
         </div>
     </div>
     
     <script>
-        // Запретить кэширование страницы для принудительного обновления
-        window.onload = function() {
-            if (window.location.search !== '?nocache=' + new Date().getTime()) {
-                window.location.search = '?nocache=' + new Date().getTime();
-            }
-        };
-
-        // Функция тестирования PDF
+        // Функция тестирования PDF (использует внутреннюю генерацию PDF вместо API)
         function testPdf() {
-            window.open('/api/simple-pdf', '_blank');
-        }
-
-        // Проверка наличия библиотеки pdfMake
-        if (typeof pdfMake === 'undefined') {
-            alert('ОШИБКА: Библиотека pdfMake не загружена! Обновите страницу или используйте другой браузер.');
-            console.error('КРИТИЧЕСКАЯ ОШИБКА: pdfMake не загружена');
+            const testPdfDefinition = {
+                content: [{
+                    text: 'Тестовый PDF',
+                    style: {
+                        fontSize: 20,
+                        bold: true,
+                        alignment: 'center'
+                    }
+                }, {
+                    text: 'Генератор прописей работает!',
+                    style: {
+                        fontSize: 14,
+                        margin: [0, 20, 0, 0],
+                        alignment: 'center'
+                    }
+                }]
+            };
+            
+            pdfMake.createPdf(testPdfDefinition).open();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -258,9 +263,32 @@
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
             
+            // Проверка загрузки pdfmake
+            if (typeof pdfMake === 'undefined') {
+                showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
+                console.error('pdfMake не загружена');
+            }
+            
+            // Функция для получения выбранного значения радиокнопки
+            function getSelectedRadioValue(name) {
+                const radio = document.querySelector(`input[name="${name}"]:checked`);
+                return radio ? radio.value : '';
+            }
+            
+            // Функция для сбора данных формы
+            function collectFormData() {
+                return {
+                    fill_type: getSelectedRadioValue('fill-type'),
+                    text: document.getElementById('text-content').value,
+                    page_layout: getSelectedRadioValue('page-layout'),
+                    font_type: getSelectedRadioValue('font-type'),
+                    page_orientation: getSelectedRadioValue('page-orientation'),
+                    student_name: document.getElementById('student-name').value
+                };
+            }
+            
             // Функция для показа ошибки
             function showError(message) {
-                console.error('ОШИБКА:', message);
                 errorBox.textContent = message;
                 errorBox.style.display = 'block';
                 setTimeout(() => {
@@ -273,134 +301,273 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Функция для получения выбранного значения радиокнопки
-            function getSelectedRadioValue(name) {
-                const radio = document.querySelector(`input[name="${name}"]:checked`);
-                return radio ? radio.value : '';
+            // Генерация PDF напрямую с pdfmake
+            function generatePDF(formData, isPreview = false) {
+                try {
+                    setLoading(true);
+                    console.log('Начало генерации PDF на клиенте');
+                    
+                    // Проверяем библиотеку pdfMake
+                    if (typeof pdfMake === 'undefined') {
+                        showError('Библиотека pdfMake не загружена. Пожалуйста, обновите страницу.');
+                        setLoading(false);
+                        return false;
+                    }
+                    
+                    // Настройка документа
+                    const pageOrientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
+                    const docDefinition = {
+                        pageSize: 'A4',
+                        pageOrientation: pageOrientation,
+                        pageMargins: [40, 40, 40, 40],
+                        content: [],
+                        styles: {
+                            header: {
+                                fontSize: 18,
+                                bold: true,
+                                margin: [0, 0, 0, 10]
+                            },
+                            student: {
+                                fontSize: 12,
+                                margin: [0, 5, 0, 20]
+                            },
+                            date: {
+                                fontSize: 10,
+                                alignment: 'right',
+                                margin: [0, 0, 0, 20]
+                            },
+                            preview: {
+                                fontSize: 12,
+                                color: 'red',
+                                alignment: 'right',
+                                margin: [0, 0, 0, 10]
+                            }
+                        }
+                    };
+                    
+                    // Добавляем заголовок
+                    docDefinition.content.push({ text: 'Пропись для практики письма', style: 'header' });
+                    
+                    // Если это предпросмотр, добавляем водяной знак
+                    if (isPreview) {
+                        docDefinition.content.push({ text: 'ПРЕДПРОСМОТР', style: 'preview' });
+                    }
+                    
+                    // Добавляем имя ученика если есть
+                    if (formData.student_name) {
+                        docDefinition.content.push({ text: `Ученик: ${formData.student_name}`, style: 'student' });
+                    }
+                    
+                    // Добавляем дату
+                    const today = new Date().toLocaleDateString('ru-RU');
+                    docDefinition.content.push({ text: `Дата: ${today}`, style: 'date' });
+                    
+                    // Определение цвета текста в зависимости от выбранного стиля
+                    let textColor = '#000000'; // Черный по умолчанию
+                    switch (formData.font_type) {
+                        case 'gray':
+                            textColor = '#808080'; // Серый
+                            break;
+                        case 'punktir':
+                            textColor = '#B4B4B4'; // Светло-серый
+                            break;
+                    }
+                    
+                    // Создаем разметку для страницы
+                    docDefinition.content.push(createPageLayout(formData.page_layout, pageOrientation));
+                    
+                    // Добавляем текст
+                    const textContent = createTextContent(formData.text, formData.fill_type, textColor);
+                    textContent.forEach(item => {
+                        docDefinition.content.push(item);
+                    });
+                    
+                    // Генерируем PDF
+                    setTimeout(() => {
+                        try {
+                            if (isPreview) {
+                                pdfMake.createPdf(docDefinition).open();
+                            } else {
+                                pdfMake.createPdf(docDefinition).download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
+                            }
+                            console.log('PDF успешно сгенерирован');
+                        } catch (error) {
+                            console.error('Ошибка при генерации PDF:', error);
+                            showError(`Ошибка при создании PDF: ${error.message}`);
+                        }
+                        setLoading(false);
+                    }, 500);
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Общая ошибка:', error);
+                    showError(`Ошибка при генерации PDF: ${error.message}`);
+                    setLoading(false);
+                    return false;
+                }
             }
             
-            // Функция для сбора данных формы
-            function collectFormData() {
-                return {
-                    task: 'practice',
-                    fill_type: getSelectedRadioValue('fill-type'),
-                    text: document.getElementById('text-content').value,
-                    page_layout: getSelectedRadioValue('page-layout'),
-                    font_type: getSelectedRadioValue('font-type'),
-                    page_orientation: getSelectedRadioValue('page-orientation'),
-                    student_name: document.getElementById('student-name').value
+            // Функция для создания разметки страницы
+            function createPageLayout(layoutType, orientation) {
+                const canvas = {
+                    type: 'canvas',
+                    canvas: []
                 };
+                
+                // Размеры страницы A4 в пунктах (pt)
+                const pageWidth = orientation === 'landscape' ? 841.89 : 595.28;
+                const pageHeight = orientation === 'landscape' ? 595.28 : 841.89;
+                
+                const marginLeft = 40;
+                const marginTop = 120; // Место для заголовка
+                const contentWidth = pageWidth - 2 * marginLeft;
+                const contentHeight = pageHeight - marginTop - 40;
+                
+                // Добавление красной линии сбоку (как в тетрадях)
+                canvas.canvas.push({
+                    type: 'line',
+                    x1: marginLeft + 20,
+                    y1: marginTop,
+                    x2: marginLeft + 20,
+                    y2: marginTop + contentHeight,
+                    lineWidth: 1,
+                    lineColor: '#FF0000'
+                });
+                
+                // Функция для добавления горизонтальных линий
+                const lineHeight = 25;
+                let currentY = marginTop;
+                
+                // Рисуем горизонтальные линии на всю страницу
+                while (currentY <= marginTop + contentHeight) {
+                    canvas.canvas.push({
+                        type: 'line',
+                        x1: marginLeft,
+                        y1: currentY,
+                        x2: marginLeft + contentWidth,
+                        y2: currentY,
+                        lineWidth: 0.5,
+                        lineColor: '#969696'
+                    });
+                    
+                    currentY += lineHeight;
+                }
+                
+                // Для клеток добавляем вертикальные линии
+                if (layoutType === 'cells') {
+                    const cellSize = lineHeight;
+                    const cols = Math.floor(contentWidth / cellSize);
+                    
+                    for (let i = 0; i <= cols; i++) {
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: marginLeft + i * cellSize,
+                            y1: marginTop,
+                            x2: marginLeft + i * cellSize,
+                            y2: marginTop + contentHeight,
+                            lineWidth: 0.5,
+                            lineColor: '#B4B4B4'
+                        });
+                    }
+                }
+                
+                // Для косых линий
+                if (layoutType === 'lines_oblique') {
+                    const step = 20;
+                    const angle = 60; // градусы
+                    const angleInRadians = angle * Math.PI / 180;
+                    
+                    for (let x = marginLeft; x <= marginLeft + contentWidth + contentHeight; x += step) {
+                        canvas.canvas.push({
+                            type: 'line',
+                            x1: x,
+                            y1: marginTop,
+                            x2: x - contentHeight / Math.tan(angleInRadians),
+                            y2: marginTop + contentHeight,
+                            lineWidth: 0.2,
+                            lineColor: '#D0D0D0'
+                        });
+                    }
+                }
+                
+                return canvas;
+            }
+            
+            // Функция для создания текстового содержимого
+            function createTextContent(text, fillType, textColor) {
+                const lines = text.split('\n');
+                const textContent = [];
+                
+                // Размеры страницы и отступы
+                const lineHeight = 25;
+                const marginTop = 120;  // Отступ сверху (после заголовка)
+                const marginLeft = 45;  // Отступ слева
+                const redLineOffset = 30;  // Отступ от красной линии
+                
+                if (fillType === 'first_letter') {
+                    // Размножаем первую букву в каждой строке
+                    lines.forEach((line, index) => {
+                        if (!line.trim()) return; // Пропускаем пустые строки
+                        
+                        const firstChar = line[0] || '';
+                        if (firstChar) {
+                            const repeatedText = firstChar.repeat(30);
+                            textContent.push({
+                                text: repeatedText,
+                                absolutePosition: { 
+                                    x: marginLeft + redLineOffset, 
+                                    y: marginTop + index * lineHeight - 5
+                                },
+                                color: textColor
+                            });
+                        }
+                    });
+                } else if (fillType === 'one_line') {
+                    // Размножаем первую строку на всю страницу
+                    if (lines[0] && lines[0].trim()) {
+                        const firstLine = lines[0].trim();
+                        
+                        // Определяем количество строк, которые поместятся на странице
+                        for (let i = 0; i < 20; i++) {
+                            textContent.push({
+                                text: firstLine,
+                                absolutePosition: { 
+                                    x: marginLeft + redLineOffset, 
+                                    y: marginTop + i * lineHeight - 5
+                                },
+                                color: textColor
+                            });
+                        }
+                    }
+                } else {
+                    // Выводим текст как есть
+                    lines.forEach((line, index) => {
+                        if (!line.trim()) return;
+                        
+                        textContent.push({
+                            text: line,
+                            absolutePosition: { 
+                                x: marginLeft + redLineOffset, 
+                                y: marginTop + index * lineHeight - 5
+                            },
+                            color: textColor
+                        });
+                    });
+                }
+                
+                return textContent;
             }
             
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
-                try {
-                    setLoading(true);
-                    const formData = collectFormData();
-                    
-                    // Создаем URL для предпросмотра в новом окне
-                    fetch('/api/generate-pdf', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(formData)
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            if (response.status === 500) {
-                                // Пробуем альтернативный путь
-                                window.open('/api/simple-pdf', '_blank');
-                                showError("Ошибка на сервере. Открываем тестовый PDF.");
-                            } else {
-                                throw new Error(`Ошибка: ${response.status}`);
-                            }
-                            return;
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        if (blob) {
-                            const url = URL.createObjectURL(blob);
-                            window.open(url, '_blank');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Ошибка при предпросмотре:', error);
-                        showError(`Не удалось создать предпросмотр. ${error.message}`);
-                        
-                        // Пробуем альтернативный путь
-                        window.open('/api/simple-pdf', '_blank');
-                    })
-                    .finally(() => {
-                        setLoading(false);
-                    });
-                } catch (error) {
-                    console.error('Общая ошибка:', error);
-                    showError(`Ошибка: ${error.message}`);
-                    setLoading(false);
-                    
-                    // Пробуем альтернативный путь
-                    window.open('/api/simple-pdf', '_blank');
-                }
+                const formData = collectFormData();
+                generatePDF(formData, true);
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
-                try {
-                    setLoading(true);
-                    const formData = collectFormData();
-                    
-                    fetch('/api/generate-pdf', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(formData)
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            if (response.status === 500) {
-                                // Пробуем альтернативный путь
-                                window.location = '/api/simple-pdf';
-                                showError("Ошибка на сервере. Загружаем тестовый PDF.");
-                            } else {
-                                throw new Error(`Ошибка: ${response.status}`);
-                            }
-                            return;
-                        }
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        if (blob) {
-                            // Создаем ссылку для скачивания
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Ошибка при скачивании:', error);
-                        showError(`Не удалось скачать PDF. ${error.message}`);
-                        
-                        // Пробуем альтернативный путь
-                        window.location = '/api/simple-pdf';
-                    })
-                    .finally(() => {
-                        setLoading(false);
-                    });
-                } catch (error) {
-                    console.error('Общая ошибка:', error);
-                    showError(`Ошибка: ${error.message}`);
-                    setLoading(false);
-                    
-                    // Пробуем альтернативный путь
-                    window.location = '/api/simple-pdf';
-                }
+                const formData = collectFormData();
+                generatePDF(formData, false);
             });
         });
     </script>
