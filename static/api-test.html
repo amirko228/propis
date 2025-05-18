@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест API генерации PDF</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #4a639e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 8px 4px;
+            cursor: pointer;
+            border-radius: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #374a77;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow: auto;
+            max-height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Тест API генерации PDF</h1>
+    
+    <div>
+        <button id="test-debug">Тест отладочного API</button>
+        <button id="test-pdf">Тест генерации PDF</button>
+    </div>
+
+    <h2>Результат:</h2>
+    <pre id="result">Нажмите кнопку для тестирования API</pre>
+
+    <script>
+        document.getElementById('test-debug').addEventListener('click', async function() {
+            try {
+                const result = document.getElementById('result');
+                result.textContent = 'Отправка запроса к /api/generate-pdf-debug...';
+                
+                const response = await fetch('/api/generate-pdf-debug', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fill_type: 'first_letter',
+                        text: 'а а а а\nб б б б\nв в в в',
+                        page_layout: 'lines',
+                        font_type: 'black',
+                        page_orientation: 'portrait',
+                        student_name: 'Test'
+                    })
+                });
+                
+                const data = await response.json();
+                result.textContent = 'Ответ от сервера:\n' + JSON.stringify(data, null, 2);
+                
+                if (response.ok) {
+                    result.style.color = 'green';
+                } else {
+                    result.style.color = 'red';
+                }
+            } catch (error) {
+                document.getElementById('result').textContent = 'Ошибка: ' + error.message;
+                document.getElementById('result').style.color = 'red';
+            }
+        });
+        
+        document.getElementById('test-pdf').addEventListener('click', async function() {
+            try {
+                const result = document.getElementById('result');
+                result.textContent = 'Отправка запроса к /api/generate-pdf...';
+                
+                const response = await fetch('/api/generate-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fill_type: 'first_letter',
+                        text: 'а а а а\nб б б б\nв в в в',
+                        page_layout: 'lines',
+                        font_type: 'black',
+                        page_orientation: 'portrait',
+                        student_name: 'Test'
+                    })
+                });
+                
+                if (response.ok) {
+                    result.textContent = 'PDF успешно создан!';
+                    result.style.color = 'green';
+                    
+                    // Получаем PDF как Blob
+                    const blob = await response.blob();
+                    
+                    // Создаем URL для скачивания
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    // Открываем PDF в новом окне
+                    window.open(url, '_blank');
+                } else {
+                    try {
+                        const errorData = await response.json();
+                        result.textContent = 'Ошибка: ' + JSON.stringify(errorData, null, 2);
+                    } catch (e) {
+                        result.textContent = 'Ошибка: ' + response.status + ' ' + response.statusText;
+                    }
+                    result.style.color = 'red';
+                }
+            } catch (error) {
+                document.getElementById('result').textContent = 'Ошибка: ' + error.message;
+                document.getElementById('result').style.color = 'red';
+            }
+        });
+    </script>
+</body>
+</html> 
