@@ -10,18 +10,7 @@
     <meta http-equiv="Expires" content="0">
     
     <!-- Библиотека jsPDF -->
-    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
-    <script>
-        // Make sure jsPDF is globally available
-        window.addEventListener('load', function() {
-            if (typeof window.jspdf === 'undefined') {
-                window.jspdf = window.jspdf || {};
-                if (typeof jsPDF !== 'undefined') {
-                    window.jspdf.jsPDF = jsPDF;
-                }
-            }
-        });
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.5.3/jspdf.min.js"></script>
     
     <style>
         body {
@@ -247,7 +236,7 @@
             const loadingElement = document.getElementById('loading');
             
             // Проверка загрузки jsPDF
-            if (typeof window.jspdf === 'undefined' && typeof window.jspdf?.jsPDF === 'undefined' && typeof jspdf?.jsPDF === 'undefined' && typeof jsPDF === 'undefined') {
+            if (typeof jsPDF === 'undefined') {
                 showError('Библиотека jsPDF не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
                 console.error('jsPDF не загружена');
             }
@@ -291,18 +280,15 @@
                     setLoading(true);
                     
                     // Проверяем библиотеку jsPDF
-                    if (typeof window.jspdf === 'undefined' && typeof window.jspdf?.jsPDF === 'undefined' && typeof jspdf?.jsPDF === 'undefined') {
+                    if (typeof jsPDF === 'undefined') {
                         showError('Библиотека jsPDF не загружена. Пожалуйста, обновите страницу.');
                         setLoading(false);
                         return false;
                     }
                     
-                    // Получаем конструктор jsPDF в зависимости от того, как он доступен
-                    const jsPDF = window.jspdf?.jsPDF || jspdf?.jsPDF || window.jsPDF;
-                    
                     // Создаем PDF документ
                     const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
-                    const doc = new jsPDF({ orientation: orientation, unit: 'mm' });
+                    const doc = new jsPDF(orientation, 'mm', 'a4');
                     
                     // Ширина и высота страницы
                     const pageWidth = orientation === 'landscape' ? 297 : 210;
