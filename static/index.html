@@ -287,7 +287,17 @@
                 
                 sendApiRequest('/api/preview', formData)
                     .then(response => {
-                        if (!response.ok) {
+                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
+                        
+                        if (response.headers.get('content-type').includes('application/pdf')) {
+                            // Если ответ содержит PDF, создаем ссылку и открываем в новом окне
+                            response.blob().then(blob => {
+                                const url = URL.createObjectURL(blob);
+                                window.open(url, '_blank');
+                            });
+                            return null; // Прерываем цепочку then
+                        } 
+                        else if (!response.ok) {
                             return response.json().then(errorData => {
                                 throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
                             });
@@ -295,11 +305,12 @@
                         return response.json();
                     })
                     .then(data => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        if (data.status === 'success' && data.preview_url) {
-                            // Открываем предпросмотр в новом окне
+                        if (data === null) return; // PDF был обработан выше
+                        
+                        if (data && data.status === 'success' && data.preview_url) {
+                            // Открываем предпросмотр в новом окне (для локального сервера)
                             window.open(data.preview_url, '_blank');
-                        } else {
+                        } else if (data) {
                             showError(data.message || 'Не удалось создать предпросмотр');
                         }
                     })
@@ -319,7 +330,22 @@
                 
                 sendApiRequest('/api/generate-pdf', formData)
                     .then(response => {
-                        if (!response.ok) {
+                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
+                        
+                        if (response.headers.get('content-type').includes('application/pdf')) {
+                            // Если ответ содержит PDF, создаем ссылку и скачиваем
+                            response.blob().then(blob => {
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = 'propisi.pdf';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            });
+                            return null; // Прерываем цепочку then
+                        } 
+                        else if (!response.ok) {
                             return response.json().then(errorData => {
                                 throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
                             });
@@ -327,11 +353,12 @@
                         return response.json();
                     })
                     .then(data => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        if (data.status === 'success' && data.file_url) {
-                            // Скачиваем файл
+                        if (data === null) return; // PDF был обработан выше
+                        
+                        if (data && data.status === 'success' && data.file_url) {
+                            // Скачиваем файл (для локального сервера)
                             window.location.href = data.file_url;
-                        } else {
+                        } else if (data) {
                             showError(data.message || 'Не удалось сгенерировать пропись');
                         }
                     })

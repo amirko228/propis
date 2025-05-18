@@ -269,16 +269,6 @@ async def generate_preview(request: Request):
     API для создания предпросмотра прописи
     """
     try:
-        # Проверяем доступность временной директории
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir, exist_ok=True)
-        
-        if not os.access(temp_dir, os.W_OK):
-            return JSONResponse(
-                status_code=500,
-                content={"status": "error", "message": f"Директория {temp_dir} недоступна для записи"}
-            )
-            
         # Получаем данные из запроса
         data = await request.json()
         
@@ -291,10 +281,8 @@ async def generate_preview(request: Request):
         page_orientation = data.get("page_orientation", "portrait")
         student_name = data.get("student_name", "")
         
-        # Создаем уникальное имя файла
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        filename = f"preview_{timestamp}.pdf"
-        filepath = os.path.join(temp_dir, filename)
+        # Создаем буфер в памяти вместо файла на диске
+        buffer = io.BytesIO()
         
         # Определяем размер страницы
         if page_orientation == "landscape":
@@ -302,8 +290,8 @@ async def generate_preview(request: Request):
         else:
             pagesize = A4
         
-        # Создаем PDF
-        c = canvas.Canvas(filepath, pagesize=pagesize)
+        # Создаем PDF в буфере
+        c = canvas.Canvas(buffer, pagesize=pagesize)
         width, height = pagesize
         
         # Настраиваем основной шрифт
@@ -388,16 +376,34 @@ async def generate_preview(request: Request):
                     # Выводим текст как есть
                     c.drawString(margin_left + 5, current_y, line)
         
-        # Сохраняем PDF
+        # Сохраняем PDF в буфер
         c.save()
         
-        # Формируем URL для просмотра
-        preview_url = f"/preview/{filename}"
+        # Перемещаем указатель в начало буфера
+        buffer.seek(0)
         
-        return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
+        # В Vercel окружении возвращаем PDF напрямую
+        if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
+            return Response(
+                content=buffer.getvalue(),
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"inline; filename=preview.pdf"}
+            )
+        else:
+            # В локальном окружении сохраняем в файл
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            filename = f"preview_{timestamp}.pdf"
+            filepath = os.path.join(temp_dir, filename)
+            
+            with open(filepath, "wb") as f:
+                f.write(buffer.getvalue())
+            
+            # Формируем URL для просмотра
+            preview_url = f"/preview/{filename}"
+            return {"status": "success", "message": "Предпросмотр создан успешно", "preview_url": preview_url}
+            
     except Exception as e:
         print(f"Ошибка в /api/preview: {str(e)}")
-        # Более подробная обработка ошибок
         error_message = f"Произошла ошибка: {str(e)}"
         print(error_message)
         
@@ -460,16 +466,6 @@ async def generate_pdf(request: Request):
     API для генерации PDF с прописями
     """
     try:
-        # Проверяем доступность временной директории
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir, exist_ok=True)
-        
-        if not os.access(temp_dir, os.W_OK):
-            return JSONResponse(
-                status_code=500,
-                content={"status": "error", "message": f"Директория {temp_dir} недоступна для записи"}
-            )
-            
         # Получаем данные из запроса
         data = await request.json()
         
@@ -482,10 +478,8 @@ async def generate_pdf(request: Request):
         page_orientation = data.get("page_orientation", "portrait")
         student_name = data.get("student_name", "")
         
-        # Создаем уникальное имя файла
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        filename = f"propisi_{timestamp}.pdf"
-        filepath = os.path.join(temp_dir, filename)
+        # Создаем буфер в памяти вместо файла на диске
+        buffer = io.BytesIO()
         
         # Определяем размер страницы
         if page_orientation == "landscape":
@@ -493,8 +487,8 @@ async def generate_pdf(request: Request):
         else:
             pagesize = A4
         
-        # Создаем PDF
-        c = canvas.Canvas(filepath, pagesize=pagesize)
+        # Создаем PDF в буфере
+        c = canvas.Canvas(buffer, pagesize=pagesize)
         width, height = pagesize
         
         # Настраиваем основной шрифт
@@ -583,16 +577,34 @@ async def generate_pdf(request: Request):
                     # Выводим текст как есть
                     c.drawString(margin_left + 5, current_y, line)
         
-        # Сохраняем PDF
+        # Сохраняем PDF в буфер
         c.save()
         
-        # Формируем URL для скачивания
-        file_url = f"/download/{filename}"
+        # Перемещаем указатель в начало буфера
+        buffer.seek(0)
         
-        return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
+        # В Vercel окружении возвращаем PDF напрямую
+        if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
+            return Response(
+                content=buffer.getvalue(),
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=propisi.pdf"}
+            )
+        else:
+            # В локальном окружении сохраняем в файл
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            filename = f"propisi_{timestamp}.pdf"
+            filepath = os.path.join(temp_dir, filename)
+            
+            with open(filepath, "wb") as f:
+                f.write(buffer.getvalue())
+            
+            # Формируем URL для скачивания
+            file_url = f"/download/{filename}"
+            return {"status": "success", "message": "Пропись успешно сгенерирована", "file_url": file_url}
+            
     except Exception as e:
         print(f"Ошибка в /api/generate-pdf: {str(e)}")
-        # Более подробная обработка ошибок для отладки
         error_type = type(e).__name__
         error_message = f"Произошла ошибка типа {error_type}: {str(e)}"
         print(error_message)
