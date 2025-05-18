@@ -9,8 +9,9 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- Новая библиотека html2pdf -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Библиотека PDFMake -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
     <style>
         body {
@@ -128,124 +129,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
-        /* Стили для PDF контейнера */
-        #pdf-container {
-            display: none;
-        }
-        
-        .pdf-content {
-            width: 210mm;
-            padding: 20mm;
-            margin: 0 auto;
-            background: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        
-        .pdf-content.landscape {
-            width: 297mm;
-            height: 210mm;
-        }
-        
-        .pdf-header {
-            margin-bottom: 10mm;
-        }
-        
-        .pdf-title {
-            font-size: 16pt;
-            margin-bottom: 5mm;
-        }
-        
-        .pdf-student {
-            font-size: 12pt;
-            margin-bottom: 3mm;
-        }
-        
-        .pdf-date {
-            font-size: 10pt;
-            text-align: right;
-        }
-        
-        .pdf-workarea {
-            margin-top: 10mm;
-        }
-        
-        .pdf-line {
-            position: relative;
-            height: 10mm;
-            margin-bottom: 10mm;
-            border-bottom: 1px solid #aaa;
-            border-top: 1px solid #aaa;
-        }
-        
-        .pdf-line:after {
-            content: '';
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: 50%;
-            border-bottom: 1px dashed #ccc;
-        }
-        
-        .pdf-text {
-            position: relative;
-            z-index: 2;
-            font-family: 'Times New Roman', serif;
-            font-size: 16pt;
-            padding: 3mm 0;
-        }
-        
-        .pdf-text.gray {
-            color: #888;
-        }
-        
-        .pdf-text.dashed {
-            color: #ccc;
-        }
-        
-        .pdf-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, 10mm);
-            gap: 0;
-        }
-        
-        .pdf-cell {
-            height: 10mm;
-            border: 1px solid #ccc;
-        }
-        
-        .pdf-oblique {
-            position: relative;
-        }
-        
-        .pdf-oblique:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: repeating-linear-gradient(
-                -45deg,
-                transparent,
-                transparent 9mm,
-                #eee 9mm,
-                #eee 10mm
-            );
-            z-index: 1;
-        }
-        
-        /* Стили для предпросмотра */
-        .watermark {
-            position: absolute;
-            top: 10mm;
-            right: 10mm;
-            color: red;
-            font-size: 14pt;
-            font-weight: bold;
-            transform: rotate(-45deg);
-            opacity: 0.5;
-        }
     </style>
 </head>
 <body>
@@ -346,22 +229,12 @@
         </div>
     </div>
     
-    <!-- Скрытый контейнер для создания PDF -->
-    <div id="pdf-container" style="display:none;"></div>
-    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const previewButton = document.getElementById('preview-button');
             const generateButton = document.getElementById('generate-button');
             const errorBox = document.getElementById('error-box');
             const loadingElement = document.getElementById('loading');
-            const pdfContainer = document.getElementById('pdf-container');
-            
-            // Проверка загрузки html2pdf.js
-            if (typeof html2pdf === 'undefined') {
-                showError('Библиотека html2pdf.js не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
-                console.error('html2pdf.js не загружена');
-            }
             
             // Функция для получения выбранного значения радиокнопки
             function getSelectedRadioValue(name) {
@@ -395,200 +268,145 @@
                 loadingElement.style.display = isLoading ? 'block' : 'none';
             }
             
-            // Создаем HTML для PDF
-            function createPdfContent(formData, isPreview) {
-                // Очищаем контейнер
-                pdfContainer.innerHTML = '';
-                
-                // Определяем ориентацию
-                const isLandscape = formData.page_orientation === 'landscape';
-                
-                // Создаем содержимое PDF
-                const pdfContent = document.createElement('div');
-                pdfContent.className = `pdf-content ${isLandscape ? 'landscape' : ''}`;
-                
-                // Добавляем заголовок
-                const header = document.createElement('div');
-                header.className = 'pdf-header';
-                
-                const title = document.createElement('div');
-                title.className = 'pdf-title';
-                title.textContent = 'Пропись для практики письма';
-                header.appendChild(title);
-                
-                // Если это предпросмотр, добавляем водяной знак
-                if (isPreview) {
-                    const watermark = document.createElement('div');
-                    watermark.className = 'watermark';
-                    watermark.textContent = 'ПРЕДПРОСМОТР';
-                    header.appendChild(watermark);
-                }
-                
-                // Добавляем имя ученика если есть
-                if (formData.student_name) {
-                    const student = document.createElement('div');
-                    student.className = 'pdf-student';
-                    student.textContent = `Ученик: ${formData.student_name}`;
-                    header.appendChild(student);
-                }
-                
-                // Добавляем дату
-                const today = new Date().toLocaleDateString('ru-RU');
-                const dateDiv = document.createElement('div');
-                dateDiv.className = 'pdf-date';
-                dateDiv.textContent = `Дата: ${today}`;
-                header.appendChild(dateDiv);
-                
-                pdfContent.appendChild(header);
-                
-                // Рабочая область для текста
-                const workarea = document.createElement('div');
-                workarea.className = 'pdf-workarea';
-                
-                // Обрабатываем текст в зависимости от типа заполнения
-                const lines = formData.text.split('\n');
-                const maxLines = 15; // Максимальное количество строк на странице
-                
-                // Определяем стиль текста
-                let textClass = '';
-                switch (formData.font_type) {
-                    case 'gray':
-                        textClass = 'gray';
-                        break;
-                    case 'punktir':
-                        textClass = 'dashed';
-                        break;
-                    default:
-                        textClass = '';
-                }
-                
-                // Создаем нужный тип разметки
-                if (formData.page_layout === 'cells') {
-                    // Клетки
-                    const grid = document.createElement('div');
-                    grid.className = 'pdf-grid';
+            // Генерация PDF с использованием pdfmake
+            function generatePDF(formData, isPreview = false) {
+                try {
+                    setLoading(true);
                     
-                    // Создаем сетку клеток
-                    const cellsCount = isLandscape ? 600 : 400; // Примерное количество клеток на странице
-                    
-                    for (let i = 0; i < cellsCount; i++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'pdf-cell';
-                        grid.appendChild(cell);
+                    // Проверяем наличие библиотеки pdfmake
+                    if (typeof pdfMake === 'undefined') {
+                        showError('Библиотека pdfMake не загружена. Пожалуйста, проверьте соединение с интернетом или попробуйте другой браузер.');
+                        setLoading(false);
+                        return false;
                     }
                     
-                    workarea.appendChild(grid);
-                } else {
-                    // Линии или линии с наклоном
-                    const isOblique = formData.page_layout === 'lines_oblique';
+                    // Определяем ориентацию
+                    const orientation = formData.page_orientation === 'landscape' ? 'landscape' : 'portrait';
                     
-                    // Обрабатываем текст
+                    // Определяем толщину и цвет линий
+                    const lineWidth = 0.5;
+                    const lineColor = '#aaaaaa';
+                    const middleLineColor = '#888888';
+                    
+                    // Определяем цвет текста
+                    let textColor = '#000000';
+                    switch(formData.font_type) {
+                        case 'gray':
+                            textColor = '#777777';
+                            break;
+                        case 'punktir':
+                            textColor = '#aaaaaa';
+                            break;
+                    }
+                    
+                    // Создаем структуру документа
+                    const docDefinition = {
+                        pageOrientation: orientation,
+                        pageSize: 'A4',
+                        content: [],
+                        styles: {
+                            header: {
+                                fontSize: 16,
+                                bold: true,
+                                margin: [0, 0, 0, 10]
+                            },
+                            subheader: {
+                                fontSize: 12,
+                                margin: [0, 5, 0, 5]
+                            },
+                            date: {
+                                fontSize: 10,
+                                alignment: 'right',
+                                margin: [0, 0, 0, 10]
+                            },
+                            text: {
+                                fontSize: 12,
+                                color: textColor
+                            }
+                        }
+                    };
+                    
+                    // Добавляем шапку документа
+                    docDefinition.content.push({ text: 'Пропись для практики письма', style: 'header' });
+                    
+                    // Если это предпросмотр, добавляем водяной знак
+                    if (isPreview) {
+                        docDefinition.watermark = { 
+                            text: 'ПРЕДПРОСМОТР', 
+                            color: 'red', 
+                            opacity: 0.3, 
+                            bold: true 
+                        };
+                    }
+                    
+                    // Добавляем имя ученика, если есть
+                    if (formData.student_name) {
+                        docDefinition.content.push({ text: `Ученик: ${formData.student_name}`, style: 'subheader' });
+                    }
+                    
+                    // Добавляем дату
+                    const today = new Date().toLocaleDateString('ru-RU');
+                    docDefinition.content.push({ text: `Дата: ${today}`, style: 'date' });
+                    
+                    // Добавляем пустую строку для отступа
+                    docDefinition.content.push({ text: ' ' });
+                    
+                    // Получаем строки текста
+                    const lines = formData.text.split('\n');
+                    const maxLines = 20; // Максимальное количество строк
+                    let textContent = [];
+                    
+                    // Подготавливаем текст в зависимости от способа заполнения
                     if (formData.fill_type === 'one_line' && lines[0] && lines[0].trim()) {
-                        // Размножаем первую строку
+                        // Размножаем первую строку на всю страницу
                         const firstLine = lines[0].trim();
-                        
                         for (let i = 0; i < maxLines; i++) {
-                            const lineDiv = document.createElement('div');
-                            lineDiv.className = isOblique ? 'pdf-line pdf-oblique' : 'pdf-line';
-                            
-                            const textDiv = document.createElement('div');
-                            textDiv.className = `pdf-text ${textClass}`;
-                            textDiv.textContent = firstLine;
-                            
-                            lineDiv.appendChild(textDiv);
-                            workarea.appendChild(lineDiv);
+                            textContent.push(firstLine);
                         }
                     } else if (formData.fill_type === 'first_letter') {
-                        // Размножаем первую букву в каждой строке
+                        // Размножаем первую букву каждой строки
                         for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
                             if (!lines[i].trim()) continue;
                             
                             const firstChar = lines[i][0] || '';
                             if (!firstChar) continue;
                             
-                            const lineDiv = document.createElement('div');
-                            lineDiv.className = isOblique ? 'pdf-line pdf-oblique' : 'pdf-line';
-                            
-                            const textDiv = document.createElement('div');
-                            textDiv.className = `pdf-text ${textClass}`;
-                            textDiv.textContent = firstChar.repeat(30); // Повторяем символ
-                            
-                            lineDiv.appendChild(textDiv);
-                            workarea.appendChild(lineDiv);
+                            // Повторяем первую букву примерно 30 раз
+                            textContent.push(firstChar.repeat(30));
                         }
                     } else {
                         // Выводим текст как есть
                         for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
                             if (!lines[i].trim()) continue;
-                            
-                            const lineDiv = document.createElement('div');
-                            lineDiv.className = isOblique ? 'pdf-line pdf-oblique' : 'pdf-line';
-                            
-                            const textDiv = document.createElement('div');
-                            textDiv.className = `pdf-text ${textClass}`;
-                            textDiv.textContent = lines[i];
-                            
-                            lineDiv.appendChild(textDiv);
-                            workarea.appendChild(lineDiv);
+                            textContent.push(lines[i]);
                         }
                     }
-                }
-                
-                pdfContent.appendChild(workarea);
-                pdfContainer.appendChild(pdfContent);
-                
-                return pdfContent;
-            }
-            
-            // Генерация PDF с помощью html2pdf
-            function generatePDF(formData, isPreview = false) {
-                try {
-                    setLoading(true);
                     
-                    // Проверяем наличие библиотеки html2pdf
-                    if (typeof html2pdf === 'undefined') {
-                        showError('Библиотека html2pdf.js не загружена. Пожалуйста, обновите страницу.');
+                    // Добавляем текст с соответствующим форматированием
+                    for (let i = 0; i < textContent.length; i++) {
+                        // Добавляем текст строки
+                        docDefinition.content.push({
+                            text: textContent[i],
+                            style: 'text',
+                            margin: [0, 15, 0, 15] // Увеличиваем вертикальные отступы для строк
+                        });
+                    }
+                    
+                    // Создаем PDF
+                    const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+                    
+                    // Обрабатываем результат
+                    setTimeout(() => {
                         setLoading(false);
-                        return false;
-                    }
-                    
-                    // Создаем HTML-контент для PDF
-                    const content = createPdfContent(formData, isPreview);
-                    
-                    // Настройки для html2pdf
-                    const opt = {
-                        margin: 10,
-                        filename: `propisi_${new Date().toISOString().slice(0,10)}.pdf`,
-                        image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2 },
-                        jsPDF: { 
-                            unit: 'mm', 
-                            format: 'a4', 
-                            orientation: formData.page_orientation === 'landscape' ? 'landscape' : 'portrait' 
+                        
+                        if (isPreview) {
+                            // Открываем PDF в новом окне
+                            pdfDocGenerator.open();
+                        } else {
+                            // Скачиваем файл
+                            pdfDocGenerator.download(`propisi_${new Date().toISOString().slice(0,10)}.pdf`);
                         }
-                    };
-                    
-                    // Генерируем PDF
-                    if (isPreview) {
-                        // Для предпросмотра открываем в новом окне
-                        html2pdf().set(opt).from(content).outputPdf('datauristring').then(function(pdfAsString) {
-                            setLoading(false);
-                            window.open(pdfAsString, '_blank');
-                        }).catch(function(error) {
-                            console.error('Ошибка при создании предпросмотра:', error);
-                            showError(`Ошибка при создании предпросмотра: ${error.message}`);
-                            setLoading(false);
-                        });
-                    } else {
-                        // Для скачивания
-                        html2pdf().set(opt).from(content).save().then(function() {
-                            setLoading(false);
-                        }).catch(function(error) {
-                            console.error('Ошибка при создании PDF:', error);
-                            showError(`Ошибка при создании PDF: ${error.message}`);
-                            setLoading(false);
-                        });
-                    }
+                    }, 1000);
                     
                     return true;
                 } catch (error) {
