@@ -287,6 +287,13 @@
                     // URL API для генерации PDF (можно настроить в зависимости от окружения)
                     const apiUrl = '/api/generate-pdf';
                     
+                    // Проверяем доступность API, если первый вызов вернул ошибку
+                    if (window.apiUnavailable) {
+                        console.log('API был недоступен ранее, сразу используем клиентский вариант');
+                        setLoading(false);
+                        return generatePDFClient(formData, isPreview);
+                    }
+                    
                     // Добавляем информацию о предпросмотре в данные запроса
                     const requestData = {
                         ...formData,
@@ -299,37 +306,50 @@
                     
                     if (isFetchSupported) {
                         // Используем Fetch API для современных браузеров
-                        response = await fetch(apiUrl, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(requestData)
-                        });
-                        
-                        if (!response.ok) {
-                            const errorText = await response.text();
-                            console.error('Ошибка API:', response.status, errorText);
-                            throw new Error(`Ошибка сервера: ${response.status}. ${errorText || ''}`);
-                        }
-                        
-                        // Получаем PDF как blob
-                        const blob = await response.blob();
-                        
-                        // Создаем URL для blob
-                        const blobUrl = URL.createObjectURL(blob);
-                        
-                        if (isPreview) {
-                            // Открываем в новом окне для предпросмотра
-                            window.open(blobUrl, '_blank');
-                        } else {
-                            // Создаем ссылку для скачивания
-                            const link = document.createElement('a');
-                            link.href = blobUrl;
-                            link.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                        try {
+                            response = await fetch(apiUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(requestData)
+                            });
+                            
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                console.error('Ошибка API:', response.status, errorText);
+                                
+                                // Если получили ошибку 500, отмечаем API как недоступный
+                                if (response.status === 500) {
+                                    window.apiUnavailable = true;
+                                    console.log('API недоступен (ошибка 500), переключаемся на клиентский вариант');
+                                }
+                                
+                                throw new Error(`Ошибка сервера: ${response.status}. ${errorText || ''}`);
+                            }
+                            
+                            // Получаем PDF как blob
+                            const blob = await response.blob();
+                            
+                            // Создаем URL для blob
+                            const blobUrl = URL.createObjectURL(blob);
+                            
+                            if (isPreview) {
+                                // Открываем в новом окне для предпросмотра
+                                window.open(blobUrl, '_blank');
+                            } else {
+                                // Создаем ссылку для скачивания
+                                const link = document.createElement('a');
+                                link.href = blobUrl;
+                                link.download = `propisi_${new Date().toISOString().slice(0,10)}.pdf`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }
+                        } catch (fetchError) {
+                            console.error('Ошибка Fetch API:', fetchError);
+                            window.apiUnavailable = true;
+                            throw fetchError;
                         }
                     } else {
                         // Используем XMLHttpRequest для старых браузеров
@@ -373,7 +393,7 @@
                     return true;
                 } catch (error) {
                     console.error('Ошибка при генерации PDF через API:', error);
-                    showError(`Ошибка при генерации PDF: ${error.message}`);
+                    showError(`Сервер временно недоступен. Переключаемся на локальную генерацию PDF...`);
                     setLoading(false);
                     
                     // Пробуем запасной вариант с генерацией на клиенте
@@ -506,6 +526,17 @@
                 const marginTop = 120; // Учитываем место для заголовка
                 const contentWidth = pageWidth - 2 * marginLeft;
                 const contentHeight = pageHeight - marginTop - 40;
+                
+                // Добавление красной линии сбоку (как в тетрадях)
+                canvas.canvas.push({
+                    type: 'line',
+                    x1: marginLeft + 20,
+                    y1: marginTop,
+                    x2: marginLeft + 20,
+                    y2: marginTop + contentHeight,
+                    lineWidth: 1,
+                    lineColor: '#FF0000'
+                });
                 
                 // Функция для добавления горизонтальных линий
                 function addHorizontalLines() {
@@ -643,6 +674,7 @@
                 const lineHeight = 40; // Высота строки в pt
                 const marginTop = 120; // Отступ сверху (после заголовка)
                 const marginLeft = 45; // Отступ слева
+                const redLineOffset = 30; // Смещение от красной линии
                 
                 if (fillType === 'first_letter') {
                     // Размножаем первую букву в каждой строке
@@ -654,7 +686,7 @@
                             const repeatedText = firstChar.repeat(30); // Примерное количество символов в строке
                             textContent.push({
                                 text: repeatedText,
-                                absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                                absolutePosition: { x: marginLeft + redLineOffset, y: marginTop + i * lineHeight },
                                 color: textColor
                             });
                         }
@@ -667,7 +699,7 @@
                         for (let i = 0; i < 20; i++) {
                             textContent.push({
                                 text: firstLine,
-                                absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                                absolutePosition: { x: marginLeft + redLineOffset, y: marginTop + i * lineHeight },
                                 color: textColor
                             });
                         }
@@ -679,7 +711,7 @@
                         
                         textContent.push({
                             text: lines[i],
-                            absolutePosition: { x: marginLeft, y: marginTop + i * lineHeight },
+                            absolutePosition: { x: marginLeft + redLineOffset, y: marginTop + i * lineHeight },
                             color: textColor
                         });
                     }
@@ -692,7 +724,14 @@
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
                 
-                // Сначала пробуем через API
+                // Сначала проверяем, был ли API недоступен ранее
+                if (window.apiUnavailable) {
+                    console.log('API был недоступен ранее, используем только клиентскую генерацию');
+                    generatePDFClient(formData, true);
+                    return;
+                }
+                
+                // Если API доступен, попробуем сначала его
                 try {
                     generatePDFViaAPI(formData, true).catch(error => {
                         console.error('Ошибка API для предпросмотра:', error);
@@ -709,7 +748,14 @@
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
                 
-                // Сначала пробуем через API
+                // Сначала проверяем, был ли API недоступен ранее
+                if (window.apiUnavailable) {
+                    console.log('API был недоступен ранее, используем только клиентскую генерацию');
+                    generatePDFClient(formData, false);
+                    return;
+                }
+                
+                // Если API доступен, попробуем сначала его
                 try {
                     generatePDFViaAPI(formData, false).catch(error => {
                         console.error('Ошибка API для скачивания:', error);
