@@ -21,6 +21,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
 import datetime
+import sys
 
 app = FastAPI(title="Генератор прописей")
 
@@ -45,11 +46,13 @@ class PropisiRequest(BaseModel):
 
 # Создаем папку для временных файлов
 # На Vercel используем /tmp директорию, которая доступна для serverless функций
-if os.environ.get('VERCEL', False):
+if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
     temp_dir = "/tmp"
+    print("Работаем в среде Vercel, используем директорию /tmp")
 else:
     temp_dir = "temp"
-os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
+    print(f"Работаем локально, используем директорию {temp_dir}")
 
 # Настройка для статических файлов - разместите их в папке static в корне проекта
 # Создаем папку, если её нет
@@ -229,6 +232,23 @@ async def test_api():
     """
     return {"status": "success", "message": "API работает корректно!"}
 
+@app.get("/api/env")
+async def env_info():
+    """
+    Диагностический API маршрут для проверки среды выполнения
+    """
+    env_data = {
+        "temp_dir": temp_dir,
+        "temp_dir_exists": os.path.exists(temp_dir),
+        "temp_dir_writable": os.access(temp_dir, os.W_OK),
+        "vercel_env": os.environ.get('VERCEL_ENV', 'not_set'),
+        "vercel": os.environ.get('VERCEL', 'not_set'),
+        "vercel_path_exists": os.path.exists('/.vercel/'),
+        "python_version": sys.version,
+        "platform": sys.platform
+    }
+    return {"status": "success", "message": "Информация о среде выполнения", "env": env_data}
+
 @app.post("/api/simple-preview")
 async def simple_preview():
     """
@@ -249,6 +269,16 @@ async def generate_preview(request: Request):
     API для создания предпросмотра прописи
     """
     try:
+        # Проверяем доступность временной директории
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir, exist_ok=True)
+        
+        if not os.access(temp_dir, os.W_OK):
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Директория {temp_dir} недоступна для записи"}
+            )
+            
         # Получаем данные из запроса
         data = await request.json()
         
@@ -382,15 +412,23 @@ async def view_preview(filename: str):
     """
     Маршрут для просмотра предпросмотра
     """
-    file_path = os.path.join(temp_dir, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
-        
-    return FileResponse(
-        path=file_path, 
-        filename=filename,
-        media_type="application/pdf"
-    )
+    try:
+        file_path = os.path.join(temp_dir, filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+            
+        # Проверяем доступность файла для чтения
+        if not os.access(file_path, os.R_OK):
+            raise HTTPException(status_code=500, detail="Файл недоступен для чтения")
+            
+        return FileResponse(
+            path=file_path, 
+            filename=filename,
+            media_type="application/pdf"
+        )
+    except Exception as e:
+        print(f"Ошибка при просмотре файла {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при доступе к файлу: {str(e)}")
 
 # Добавляем маршрут для скачивания файлов
 @app.get("/download/{filename}")
@@ -398,15 +436,23 @@ async def download_file(filename: str):
     """
     Маршрут для скачивания сгенерированных файлов
     """
-    file_path = os.path.join(temp_dir, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
-        
-    return FileResponse(
-        path=file_path, 
-        filename=filename,
-        media_type="application/pdf"
-    )
+    try:
+        file_path = os.path.join(temp_dir, filename)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+            
+        # Проверяем доступность файла для чтения
+        if not os.access(file_path, os.R_OK):
+            raise HTTPException(status_code=500, detail="Файл недоступен для чтения")
+            
+        return FileResponse(
+            path=file_path, 
+            filename=filename,
+            media_type="application/pdf"
+        )
+    except Exception as e:
+        print(f"Ошибка при скачивании файла {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при доступе к файлу: {str(e)}")
 
 @app.post("/api/generate-pdf")
 async def generate_pdf(request: Request):
@@ -414,6 +460,16 @@ async def generate_pdf(request: Request):
     API для генерации PDF с прописями
     """
     try:
+        # Проверяем доступность временной директории
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir, exist_ok=True)
+        
+        if not os.access(temp_dir, os.W_OK):
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"Директория {temp_dir} недоступна для записи"}
+            )
+            
         # Получаем данные из запроса
         data = await request.json()
         
