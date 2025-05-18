@@ -248,127 +248,74 @@
                 confirmationModal.style.display = 'none';
             });
             
-            // Функция для отправки API-запроса с повторными попытками
-            async function sendApiRequest(url, formData, maxRetries = 3) {
-                let retries = 0;
-                let error = null;
-                
-                while (retries < maxRetries) {
-                    try {
-                        const response = await fetch(url, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(formData)
-                        });
-                        
-                        // Если получили ответ от сервера, возвращаем его независимо от статус-кода
-                        // Обработка ошибок будет происходить в вызывающей функции
-                        return response;
-                    } catch (err) {
-                        error = err;
-                        retries++;
-                        console.log(`Попытка ${retries}/${maxRetries} не удалась: ${err.message}`);
-                        
-                        // Ждем немного перед повторной попыткой (увеличиваем время с каждой попыткой)
-                        await new Promise(resolve => setTimeout(resolve, retries * 500));
-                    }
-                }
-                
-                // Если все попытки не удались, выбрасываем последнюю ошибку
-                throw error;
-            }
-            
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                showModal('Создаем предпросмотр, пожалуйста, подождите...');
                 
-                sendApiRequest('/api/preview', formData)
-                    .then(response => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        
-                        if (response.headers.get('content-type').includes('application/pdf')) {
-                            // Если ответ содержит PDF, создаем ссылку и открываем в новом окне
-                            response.blob().then(blob => {
-                                const url = URL.createObjectURL(blob);
-                                window.open(url, '_blank');
-                            });
-                            return null; // Прерываем цепочку then
-                        } 
-                        else if (!response.ok) {
-                            return response.json().then(errorData => {
-                                throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data === null) return; // PDF был обработан выше
-                        
-                        if (data && data.status === 'success' && data.preview_url) {
-                            // Открываем предпросмотр в новом окне (для локального сервера)
-                            window.open(data.preview_url, '_blank');
-                        } else if (data) {
-                            showError(data.message || 'Не удалось создать предпросмотр');
-                        }
-                    })
-                    .catch(error => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        console.error('Ошибка:', error);
-                        showError('Ошибка: ' + error.message);
-                        // Показываем информативное сообщение
-                        showModal('Ошибка при создании предпросмотра. Попробуйте снова через несколько секунд.');
-                    });
+                fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(errorData => {
+                            throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success' && data.preview_url) {
+                        // Открываем предпросмотр в новом окне
+                        window.open(data.preview_url, '_blank');
+                    } else {
+                        showError(data.message || 'Не удалось создать предпросмотр');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showError('Ошибка: ' + error.message);
+                    // Показываем информативное сообщение
+                    showModal('Ошибка на сервере. Пожалуйста, попробуйте позже или обратитесь к администратору.');
+                });
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
                 const formData = collectFormData();
-                showModal('Генерируем документ, пожалуйста, подождите...');
                 
-                sendApiRequest('/api/generate-pdf', formData)
-                    .then(response => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        
-                        if (response.headers.get('content-type').includes('application/pdf')) {
-                            // Если ответ содержит PDF, создаем ссылку и скачиваем
-                            response.blob().then(blob => {
-                                const url = URL.createObjectURL(blob);
-                                const link = document.createElement('a');
-                                link.href = url;
-                                link.download = 'propisi.pdf';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                            });
-                            return null; // Прерываем цепочку then
-                        } 
-                        else if (!response.ok) {
-                            return response.json().then(errorData => {
-                                throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
-                            });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data === null) return; // PDF был обработан выше
-                        
-                        if (data && data.status === 'success' && data.file_url) {
-                            // Скачиваем файл (для локального сервера)
-                            window.location.href = data.file_url;
-                        } else if (data) {
-                            showError(data.message || 'Не удалось сгенерировать пропись');
-                        }
-                    })
-                    .catch(error => {
-                        confirmationModal.style.display = 'none'; // Скрываем модальное окно ожидания
-                        console.error('Ошибка:', error);
-                        showError('Ошибка: ' + error.message);
-                        // Показываем информативное сообщение
-                        showModal('Ошибка при генерации PDF. Попробуйте снова через несколько секунд.');
-                    });
+                fetch('/api/generate-pdf', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(errorData => {
+                            throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success' && data.file_url) {
+                        // Скачиваем файл
+                        window.location.href = data.file_url;
+                    } else {
+                        showError(data.message || 'Не удалось сгенерировать пропись');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showError('Ошибка: ' + error.message);
+                    // Показываем информативное сообщение
+                    showModal('Ошибка при генерации. Пожалуйста, проверьте ваши данные и попробуйте снова.');
+                });
             });
         });
     </script>

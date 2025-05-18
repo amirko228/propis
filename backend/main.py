@@ -21,7 +21,6 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase._fontdata import standardFonts
 from reportlab.pdfbase import _fontdata
 import datetime
-import sys
 
 app = FastAPI(title="Генератор прописей")
 
@@ -46,13 +45,11 @@ class PropisiRequest(BaseModel):
 
 # Создаем папку для временных файлов
 # На Vercel используем /tmp директорию, которая доступна для serverless функций
-if os.environ.get('VERCEL') == '1' or os.environ.get('VERCEL_ENV') or os.path.exists('/.vercel/'):
+if os.environ.get('VERCEL', False):
     temp_dir = "/tmp"
-    print("Работаем в среде Vercel, используем директорию /tmp")
 else:
     temp_dir = "temp"
     os.makedirs(temp_dir, exist_ok=True)
-    print(f"Работаем локально, используем директорию {temp_dir}")
 
 # Настройка для статических файлов - разместите их в папке static в корне проекта
 # Создаем папку, если её нет
@@ -231,23 +228,6 @@ async def test_api():
     Тестовый API маршрут для проверки соединения
     """
     return {"status": "success", "message": "API работает корректно!"}
-
-@app.get("/api/env")
-async def env_info():
-    """
-    Диагностический API маршрут для проверки среды выполнения
-    """
-    env_data = {
-        "temp_dir": temp_dir,
-        "temp_dir_exists": os.path.exists(temp_dir),
-        "temp_dir_writable": os.access(temp_dir, os.W_OK),
-        "vercel_env": os.environ.get('VERCEL_ENV', 'not_set'),
-        "vercel": os.environ.get('VERCEL', 'not_set'),
-        "vercel_path_exists": os.path.exists('/.vercel/'),
-        "python_version": sys.version,
-        "platform": sys.platform
-    }
-    return {"status": "success", "message": "Информация о среде выполнения", "env": env_data}
 
 @app.post("/api/simple-preview")
 async def simple_preview():
