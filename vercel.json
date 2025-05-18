@@ -7,17 +7,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1",
-      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+      "dest": "/api/$1"
     },
     {
       "src": "/(.*)",
       "dest": "/static/$1"
     }
-  ],
-  "functions": {
-    "api/*.py": {
-      "maxDuration": 10
-    }
-  }
+  ]
 } 

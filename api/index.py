@@ -1,4 +1,4 @@
-from generate_pdf import app
+from .generate_pdf import app
 
 # Это основная точка входа для Vercel
 # Vercel автоматически найдет этот файл и использует его
