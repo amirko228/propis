@@ -3,9 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Генератор прописей</title>
-    <!-- Добавляем библиотеку jsPDF для генерации PDF на клиенте -->
+    <title>Генератор прописей v2</title>
+    <!-- Обход кеширования -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <!-- Несколько источников библиотеки jsPDF для надежности -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        // Резервные источники на случай, если первый не загрузится
+        if (typeof window.jspdf === 'undefined') {
+            document.write('<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"><\/script>');
+        }
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,16 +24,27 @@
             margin: 0 auto;
             padding: 20px;
             line-height: 1.6;
+            background-color: #f8f8f8;
         }
         h1, h2 {
             color: #333;
+        }
+        .version-badge {
+            background-color: #4caf50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-left: 5px;
+            vertical-align: middle;
         }
         .section {
             border: 1px solid #ddd;
             border-radius: 5px;
             padding: 20px;
             margin-bottom: 20px;
-            background-color: #f9f9f9;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .options-group {
             margin-bottom: 15px;
@@ -109,13 +131,24 @@
             padding: 10px 15px;
             margin-bottom: 20px;
         }
+        .error-alert {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <h1>Генератор прописей</h1>
+    <h1>Генератор прописей <span class="version-badge">v2.0</span></h1>
     
     <div class="alert">
-        Генератор работает полностью в вашем браузере - PDF создаётся локально, без отправки на сервер.
+        <strong>Обновлено!</strong> Генератор теперь работает полностью в вашем браузере - PDF создаётся локально, без отправки на сервер.
+    </div>
+    
+    <div id="jspdf-error" class="error-alert">
+        <strong>Внимание!</strong> Не удалось загрузить библиотеку jsPDF. Пожалуйста, проверьте подключение к интернету или попробуйте другой браузер.
     </div>
     
     <div class="section">
@@ -201,7 +234,7 @@
     </div>
     
     <div class="section">
-        <button class="preview" id="preview-button">Предпросмотр</button>
+        <button class="preview" id="preview-button">Предпросмотр PDF</button>
         <button id="generate-button">Скачать PDF</button>
     </div>
     
@@ -215,6 +248,14 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем загрузку библиотеки jsPDF
+            if (typeof window.jspdf === 'undefined') {
+                document.getElementById('jspdf-error').style.display = 'block';
+                console.error('jsPDF не загружен!');
+            } else {
+                console.log('jsPDF успешно загружен!');
+            }
+            
             const previewButton = document.getElementById('preview-button');
             const generateButton = document.getElementById('generate-button');
             const errorBox = document.getElementById('error-box');
@@ -263,6 +304,12 @@
             // Генерация PDF с помощью jsPDF на клиенте
             function generatePDFClient(formData, isPreview = false) {
                 try {
+                    // Проверяем наличие библиотеки jsPDF
+                    if (typeof window.jspdf === 'undefined') {
+                        showError('Библиотека jsPDF не загружена. Пожалуйста, обновите страницу или попробуйте другой браузер.');
+                        return false;
+                    }
+                    
                     const { jsPDF } = window.jspdf;
                     
                     // Создаем новый PDF документ
@@ -486,14 +533,22 @@
             
             // Обработчик кнопки предпросмотра
             previewButton.addEventListener('click', function() {
-                const formData = collectFormData();
-                generatePDFClient(formData, true);
+                showModal('Генерация предпросмотра...');
+                setTimeout(() => {
+                    confirmationModal.style.display = 'none';
+                    const formData = collectFormData();
+                    generatePDFClient(formData, true);
+                }, 500);
             });
             
             // Обработчик кнопки генерации
             generateButton.addEventListener('click', function() {
-                const formData = collectFormData();
-                generatePDFClient(formData, false);
+                showModal('Создание PDF...');
+                setTimeout(() => {
+                    confirmationModal.style.display = 'none';
+                    const formData = collectFormData();
+                    generatePDFClient(formData, false);
+                }, 500);
             });
         });
     </script>
